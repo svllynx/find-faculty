@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+/*
+ * FIND design tokens.
+ *
+ * One restrained palette: a deep campus indigo for structure, a single warm
+ * accent, and three status colours that are used ONLY for availability so the
+ * green/amber/red vocabulary never means anything else in the interface.
+ */
+@theme {
+  --color-ink: #0f1729;
+  --color-ink-soft: #33405c;
+  --color-muted: #667694;
+  --color-line: #dfe4ee;
+  --color-surface: #ffffff;
+  --color-canvas: #f5f7fb;
+  --color-raise: #eef2f9;
+
+  --color-brand: #24397a;
+  --color-brand-soft: #e6ebf8;
+  --color-brand-ink: #1a2a5c;
+  --color-accent: #b4531a;
+  --color-accent-soft: #fdf0e6;
+
+  --color-open: #1c7a4a;
+  --color-open-soft: #e3f5eb;
+  --color-soon: #96631a;
+  --color-soon-soft: #fdf3df;
+  --color-shut: #a32f31;
+  --color-shut-soft: #fbe9e9;
+
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* A visible, consistent focus ring everywhere — keyboard users should never
+     have to guess where they are. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
+  }
+
+  /* Respect a reduced-motion preference rather than animating regardless. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  .field {
+    width: 100%;
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9375rem;
+    color: var(--color-ink);
+  }
+
+  .field:hover {
+    border-color: #c3ccdd;
+  }
+
+  .label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    margin-bottom: 0.375rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+
+  .btn-primary {
+    background-color: var(--color-brand);
+    color: #fff;
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-brand-ink);
+  }
+
+  .btn-quiet {
+    background-color: var(--color-surface);
+    border-color: var(--color-line);
+    color: var(--color-ink-soft);
+  }
+
+  .btn-quiet:hover {
+    background-color: var(--color-raise);
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+/* Screen-reader-only text that still receives focus when tabbed to. */
+.sr-only-focusable:not(:focus):not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
