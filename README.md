@@ -7,6 +7,10 @@ Instead of asking classmates, walking the halls, or checking each department's
 bulletin board, a student searches once and gets the office, the office hours,
 the current availability and the walking directions on one page.
 
+**Live demo: https://find-faculty-tau.vercel.app**
+Sign in as `admin@campus.edu.ph` / `admin1234` to try the maintainer side. The
+demo's data is temporary and resets on its own — see [Deployment](#deployment).
+
 ## What FIND is — and is not
 
 FIND is an **information and scheduling system**, not a tracking system.
@@ -84,6 +88,11 @@ temp directory, and every cold start gets a fresh one, so FIND seeds the demo
 campus on boot and edits survive only as long as that instance. The site says so
 in a banner. That makes it a genuinely usable demo — search, sign in, publish
 office hours, post availability — without pretending to be a system of record.
+
+Because each serverless instance keeps its own copy, a signed-in session lives
+on the instance that created it. If a request lands on a different instance you
+may be asked to sign in again. That is a property of the temporary storage, not
+of the auth code — a shared database removes it.
 
 **Making it permanent** means giving it a database that outlives the instance.
 The data layer is deliberately narrow: `src/lib/db.ts` plus the queries in
