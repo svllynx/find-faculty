@@ -41,26 +41,75 @@ export const officeHoursSchema = z
     }
   });
 
+/**
+ * A profile photo is either an image the faculty member uploaded (stored inline
+ * as a data URL, so FIND needs no file storage and works on a read-only host)
+ * or an https link. Anything else — javascript:, http:, a non-image data URL —
+ * is refused, because this string is rendered as an image src.
+ */
+const PHOTO_MAX = 400_000; // ~300 KB of image once base64-decoded
+export const photoSchema = z
+  .string()
+  .trim()
+  .max(PHOTO_MAX, { message: "That image is too large. Please use one under 300 KB." })
+  .refine(
+    (v) =>
+      v === "" ||
+      /^data:image\/(png|jpeg|jpg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) ||
+      /^https:\/\/[^\s]+$/.test(v),
+    { message: "Use an uploaded image or an https link" },
+  );
+
 export const profileSchema = z.object({
   full_name: z.string().trim().min(2).max(120).optional(),
   title: z.string().trim().max(80).optional(),
   department_id: z.number().int().positive().nullable().optional(),
-  building_id: z.number().int().positive().nullable().optional(),
-  room: z.string().trim().max(20).optional(),
-  floor: z.string().trim().max(40).optional(),
+  /** The room this faculty member sits in; null means not assigned yet. */
+  room_id: z.number().int().positive().nullable().optional(),
+  photo_url: photoSchema.optional(),
   email: z.union([z.string().trim().email(), z.literal("")]).optional(),
   phone: z.string().trim().max(40).optional(),
   subjects: z.string().trim().max(400).optional(),
   consultation_note: z.string().trim().max(400).optional(),
 });
 
-export const statusSchema = z.object({
-  /** null clears the manual status and hands the badge back to the schedule. */
-  manual_status: z.enum(["available", "unavailable", "office_hours"]).nullable(),
-  manual_note: z.string().trim().max(200).default(""),
-  /** Minutes from now until the status expires. Omit for "until I clear it". */
-  expires_in_minutes: z.number().int().min(5).max(60 * 24 * 14).nullable().default(null),
-});
+/** A year out is past any plausible sabbatical, and keeps a typo from sticking. */
+const MAX_OVERRIDE_DAYS = 400;
+
+export const statusSchema = z
+  .object({
+    /** null clears the override and hands the badge back to the schedule. */
+    manual_status: z.enum(["available", "unavailable", "office_hours"]).nullable(),
+    manual_note: z.string().trim().max(200).default(""),
+    /** Short overrides: minutes from now. */
+    expires_in_minutes: z
+      .number()
+      .int()
+      .min(5)
+      .max(60 * 24 * MAX_OVERRIDE_DAYS)
+      .nullable()
+      .default(null),
+    /** Long overrides ("away until the 3rd"): an explicit end, as an ISO datetime. */
+    expires_at: z.string().datetime().nullable().default(null),
+  })
+  .superRefine((input, ctx) => {
+    if (!input.expires_at) return;
+    const until = new Date(input.expires_at);
+    if (until.getTime() <= Date.now()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expires_at"],
+        message: "Choose an end date in the future",
+      });
+    }
+    if (until.getTime() > Date.now() + MAX_OVERRIDE_DAYS * 24 * 60 * 60 * 1000) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expires_at"],
+        message: `An override cannot run more than ${MAX_OVERRIDE_DAYS} days`,
+      });
+    }
+  });
 
 export const createFacultySchema = profileSchema.extend({
   full_name: z.string().trim().min(2).max(120),
@@ -70,9 +119,8 @@ const PROFILE_COLUMNS = [
   "full_name",
   "title",
   "department_id",
-  "building_id",
-  "room",
-  "floor",
+  "room_id",
+  "photo_url",
   "email",
   "phone",
   "subjects",
@@ -101,7 +149,9 @@ export function updateFacultyProfile(
 
   transaction(db, () => {
     db.prepare(`UPDATE faculty SET ${sets.join(", ")} WHERE id = ?`).run(...params);
-    auditLog(db, actor, "faculty.update", facultyId, Object.keys(input).join(", "));
+    // A photo is a long data URL; log that it changed, never the value itself.
+    const changed = Object.keys(input).map((k) => (k === "photo_url" ? "photo" : k));
+    auditLog(db, actor, "faculty.update", facultyId, changed.join(", "));
   });
 }
 
@@ -125,16 +175,21 @@ export function replaceOfficeHours(
   });
 }
 
+/** Work out when an override should lapse. An explicit date wins over a duration. */
+export function overrideEndsAt(input: z.infer<typeof statusSchema>, now = Date.now()): string | null {
+  if (!input.manual_status) return null;
+  if (input.expires_at) return new Date(input.expires_at).toISOString();
+  if (input.expires_in_minutes) return new Date(now + input.expires_in_minutes * 60_000).toISOString();
+  return null; // stands until cleared
+}
+
 export function setManualStatus(
   db: DatabaseSync,
   facultyId: number,
   input: z.infer<typeof statusSchema>,
   actor: SessionUser | null,
 ): void {
-  const until =
-    input.manual_status && input.expires_in_minutes
-      ? new Date(Date.now() + input.expires_in_minutes * 60_000).toISOString()
-      : null;
+  const until = overrideEndsAt(input);
 
   transaction(db, () => {
     db.prepare(
@@ -150,7 +205,13 @@ export function setManualStatus(
       input.manual_status,
       facultyId,
     );
-    auditLog(db, actor, "status.set", facultyId, input.manual_status ?? "cleared");
+    auditLog(
+      db,
+      actor,
+      "status.set",
+      facultyId,
+      input.manual_status ? `${input.manual_status}${until ? ` until ${until.slice(0, 10)}` : ""}` : "cleared",
+    );
   });
 }
 
@@ -162,17 +223,16 @@ export function createFaculty(
   return transaction(db, () => {
     const result = db
       .prepare(
-        `INSERT INTO faculty (full_name, title, department_id, building_id, room, floor,
+        `INSERT INTO faculty (full_name, title, department_id, room_id, photo_url,
                               email, phone, subjects, consultation_note)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.full_name,
         input.title ?? "",
         input.department_id ?? null,
-        input.building_id ?? null,
-        input.room ?? "",
-        input.floor ?? "",
+        input.room_id ?? null,
+        input.photo_url ?? "",
         input.email ?? "",
         input.phone ?? "",
         input.subjects ?? "",

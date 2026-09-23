@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@/lib/db";
-import { listBuildings, listDepartments, openNowCount, searchFaculty } from "@/lib/faculty";
+import { listDepartments, listFloors, openNowCount, searchFaculty } from "@/lib/faculty";
 import { campusNow, WEEKDAYS, formatMinute } from "@/lib/time";
 import { isOpenNow } from "@/lib/availability";
 import SearchForm from "@/components/SearchForm";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 type Search = {
   q?: string;
   department?: string;
-  building?: string;
+  floor?: string;
   day?: string;
   openNow?: string;
 };
@@ -22,20 +22,28 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const now = new Date();
   const clock = campusNow(now);
 
-  const dayRaw = params.day ? Number(params.day) : NaN;
+  const intParam = (raw: string | undefined, min: number, max: number) => {
+    if (!raw) return undefined;
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+  };
   const filters = {
     q: params.q?.trim() || undefined,
     department: params.department || undefined,
-    building: params.building || undefined,
-    weekday: Number.isInteger(dayRaw) && dayRaw >= 0 && dayRaw <= 6 ? dayRaw : undefined,
+    floor: intParam(params.floor, 0, 99),
+    weekday: intParam(params.day, 0, 6),
     openNow: params.openNow === "1",
   };
 
   const results = searchFaculty(db, filters, now);
   const departments = listDepartments(db);
-  const buildings = listBuildings(db);
+  const floors = listFloors(db);
   const hasQuery = Boolean(
-    filters.q || filters.department || filters.building || filters.weekday !== undefined || filters.openNow,
+    filters.q ||
+      filters.department ||
+      filters.floor !== undefined ||
+      filters.weekday !== undefined ||
+      filters.openNow,
   );
 
   const openCount = openNowCount(db, now);
@@ -47,8 +55,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           Where and when can I find my professor?
         </h1>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
-          Search once and get the office, the office hours and the walking directions together —
-          instead of asking classmates or checking each department&rsquo;s bulletin board.
+          Search once and get the office, the office hours and directions to the door together —
+          instead of asking classmates or checking the CCIS bulletin board.
         </p>
         <p className="mt-2 text-sm text-muted">
           {WEEKDAYS[clock.weekday]}, {formatMinute(clock.minute)} on campus ·{" "}
@@ -61,11 +69,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <section className="card mb-8 p-4 sm:p-5">
         <SearchForm
           departments={departments}
-          buildings={buildings}
+          floors={floors}
           initial={{
             q: filters.q ?? "",
             department: filters.department ?? "",
-            building: filters.building ?? "",
+            floor: filters.floor === undefined ? "" : String(filters.floor),
             day: filters.weekday === undefined ? "" : String(filters.weekday),
             openNow: filters.openNow,
           }}
@@ -75,7 +83,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <section aria-labelledby="results-heading">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="results-heading" className="text-lg font-semibold">
-            {hasQuery ? "Search results" : "All faculty"}
+            {hasQuery ? "Search results" : "All CCIS faculty"}
           </h2>
           <p aria-live="polite" className="text-sm text-muted">
             {results.length} {results.length === 1 ? "faculty member" : "faculty members"}
@@ -107,7 +115,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         )}
       </section>
 
-      <section className="mt-12 grid gap-4 sm:grid-cols-3">
+      <section className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             icon: "🟢",
@@ -122,7 +130,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           {
             icon: "🔴",
             title: "Unavailable",
-            body: "They posted that they are away, so you know not to make the trip.",
+            body: "They posted that they are out, so you know not to make the trip.",
+          },
+          {
+            icon: "🗓️",
+            title: "Away until a date",
+            body: "A longer absence — a seminar, leave, an accreditation visit — with the date they are back.",
           },
         ].map((item) => (
           <article key={item.title} className="card p-4">

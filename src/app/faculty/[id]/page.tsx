@@ -2,13 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getDb } from "@/lib/db";
-import { getFaculty, listBuildings } from "@/lib/faculty";
-import { campusNow, humanizeGap, formatRange, WEEKDAYS } from "@/lib/time";
+import { getFaculty, listRooms } from "@/lib/faculty";
+import { campusNow, humanizeGap, formatRange, formatDate, WEEKDAYS } from "@/lib/time";
 import { currentUser, canEditFaculty } from "@/lib/auth";
 import StatusBadge, { SourceNote } from "@/components/StatusBadge";
 import HoursTable from "@/components/HoursTable";
 import DirectionsPanel from "@/components/DirectionsPanel";
-import CampusMap from "@/components/CampusMap";
+import FloorMap from "@/components/FloorMap";
+import Avatar from "@/components/Avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,8 @@ export default async function FacultyProfilePage({ params }: Params) {
   const clock = campusNow(now);
   const { availability } = faculty;
   const next = availability.nextWindow;
+  const floor = faculty.room_floor ?? 1;
+  const rooms = listRooms(db, floor);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
@@ -54,13 +57,21 @@ export default async function FacultyProfilePage({ params }: Params) {
       {/* ── Identity + status ─────────────────────────────────────────────── */}
       <header className="card p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{faculty.full_name}</h1>
-            <p className="mt-1 text-[15px] text-ink-soft">
-              {faculty.title}
-              {faculty.title && faculty.department_name ? " · " : ""}
-              {faculty.department_name}
-            </p>
+          <div className="flex items-start gap-4">
+            <Avatar name={faculty.full_name} photo={faculty.photo_url} size="lg" />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{faculty.full_name}</h1>
+              <p className="mt-1 text-[15px] text-ink-soft">
+                {faculty.title}
+                {faculty.title && faculty.department_name ? " · " : ""}
+                {faculty.department_name}
+              </p>
+              {faculty.college_code && (
+                <p className="mt-0.5 text-sm text-muted">
+                  {faculty.college_name} ({faculty.college_code})
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-col items-start gap-1.5 sm:items-end">
@@ -72,6 +83,18 @@ export default async function FacultyProfilePage({ params }: Params) {
         <p className="mt-4 rounded-lg bg-canvas px-4 py-3 text-sm text-ink-soft">
           {availability.detail}
         </p>
+
+        {/* A long absence is the one thing worth repeating loudly: it is the
+            difference between "come back later" and "come back next month". */}
+        {availability.longAbsence && availability.until && (
+          <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-shut/25 bg-shut-soft px-4 py-3 text-sm text-shut">
+            <span aria-hidden="true">🗓️</span>
+            <span>
+              <strong className="font-semibold">Away until {formatDate(availability.until)}.</strong>{" "}
+              Office hours below resume after that date.
+            </span>
+          </p>
+        )}
 
         {faculty.consultation_note && (
           <p className="mt-3 border-l-2 border-accent bg-accent-soft px-4 py-2.5 text-sm text-ink-soft">
@@ -102,8 +125,17 @@ export default async function FacultyProfilePage({ params }: Params) {
             </h2>
             <dl className="mt-3 divide-y divide-line text-sm">
               <Row label="Building">{faculty.building_name ?? "Not assigned"}</Row>
-              <Row label="Room">{faculty.room ? `Room ${faculty.room}` : "Not assigned"}</Row>
-              {faculty.floor && <Row label="Floor">{faculty.floor}</Row>}
+              <Row label="Room">
+                {faculty.room_number ? (
+                  <>
+                    Room {faculty.room_number}
+                    {faculty.room_name ? ` — ${faculty.room_name}` : ""}
+                  </>
+                ) : (
+                  "Not assigned"
+                )}
+              </Row>
+              {faculty.floorLabel && <Row label="Floor">{faculty.floorLabel}</Row>}
               <Row label="Department">{faculty.department_name ?? "—"}</Row>
               {faculty.email && (
                 <Row label="Email">
@@ -165,7 +197,14 @@ export default async function FacultyProfilePage({ params }: Params) {
             </div>
           </section>
 
-          <CampusMap buildings={listBuildings(db)} highlight={faculty.building_code} />
+          {faculty.room_id && (
+            <FloorMap
+              rooms={rooms}
+              floor={floor}
+              buildingName={faculty.building_name ?? "CCIS Building"}
+              highlightRoomId={faculty.room_id}
+            />
+          )}
 
           <aside className="card bg-brand-soft/50 p-5 text-sm text-ink-soft">
             <h2 className="text-sm font-semibold text-brand-ink">Before you walk over</h2>

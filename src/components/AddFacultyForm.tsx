@@ -2,15 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Building, Department } from "@/lib/faculty";
+import type { Department, RoomWithOccupants } from "@/lib/faculty";
 
 /** Department admins add a record here; office hours are filled in afterwards. */
 export default function AddFacultyForm({
   departments,
-  buildings,
+  rooms,
 }: {
   departments: Department[];
-  buildings: Building[];
+  rooms: RoomWithOccupants[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -18,8 +18,7 @@ export default function AddFacultyForm({
     full_name: "",
     title: "",
     department_id: "",
-    building_id: "",
-    room: "",
+    room_id: "",
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,9 +37,8 @@ export default function AddFacultyForm({
       body: JSON.stringify({
         full_name: form.full_name,
         title: form.title,
-        room: form.room,
         department_id: form.department_id ? Number(form.department_id) : null,
-        building_id: form.building_id ? Number(form.building_id) : null,
+        room_id: form.room_id ? Number(form.room_id) : null,
       }),
     });
     const payload = await response.json().catch(() => ({}));
@@ -52,7 +50,7 @@ export default function AddFacultyForm({
       return;
     }
 
-    setForm({ full_name: "", title: "", department_id: "", building_id: "", room: "" });
+    setForm({ full_name: "", title: "", department_id: "", room_id: "" });
     setBusy(false);
     setOpen(false);
     router.push(`/admin?faculty=${payload.id}`);
@@ -110,23 +108,18 @@ export default function AddFacultyForm({
           </select>
         </div>
         <div>
-          <label htmlFor="new_building" className="label">
-            Building
+          <label htmlFor="new_room" className="label">
+            Office room
           </label>
-          <select id="new_building" value={form.building_id} onChange={set("building_id")} className="field">
-            <option value="">Not assigned</option>
-            {buildings.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
+          <select id="new_room" value={form.room_id} onChange={set("room_id")} className="field">
+            <option value="">Not assigned yet</option>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                Room {r.number}
+                {r.name ? ` — ${r.name}` : ""}
               </option>
             ))}
           </select>
-        </div>
-        <div>
-          <label htmlFor="new_room" className="label">
-            Room
-          </label>
-          <input id="new_room" value={form.room} onChange={set("room")} className="field" placeholder="204" />
         </div>
       </div>
 

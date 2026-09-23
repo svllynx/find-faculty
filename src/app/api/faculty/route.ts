@@ -39,10 +39,10 @@ export async function POST(request: Request) {
     return ok({ id }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not create the record.";
-    // A bad department_id / building_id trips a foreign key, which is the
+    // A bad department_id / room_id trips a foreign key, which is the
     // caller's mistake rather than a server fault.
     if (message.includes("FOREIGN KEY")) {
-      return fail(422, "That department or building does not exist.");
+      return fail(422, "That department or room does not exist.");
     }
     throw err;
   }

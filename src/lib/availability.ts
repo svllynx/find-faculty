@@ -1,4 +1,13 @@
-import { campusNow, humanizeGap, formatRange, WEEKDAYS, type CampusNow } from "./time";
+import {
+  campusNow,
+  humanizeGap,
+  formatRange,
+  formatDate,
+  formatDateTime,
+  parseStored,
+  WEEKDAYS,
+  type CampusNow,
+} from "./time";
 
 /**
  * Availability resolution — the one piece of logic that defines what FIND promises.
@@ -9,9 +18,14 @@ import { campusNow, humanizeGap, formatRange, WEEKDAYS, type CampusNow } from ".
  *   1. the office-hours schedule the faculty member published  ("expected in office")
  *   2. a status the faculty member voluntarily posted           ("confirmed by them")
  *
- * A manual status always wins while it is unexpired, because the person knows more
- * than their schedule does. Otherwise we report the schedule and label it as such,
- * so a student can tell "the timetable says so" apart from "they said so".
+ * A posted status always wins while it is unexpired, because the person knows
+ * more than their schedule does. Otherwise we report the schedule and label it
+ * as such, so a student can tell "the timetable says so" apart from "they said so".
+ *
+ * A posted status that runs longer than a day is an ABSENCE OVERRIDE: the
+ * "away for a week / a month" case. It reads differently to a student, because
+ * what they need is not "not now" but "not until the 3rd", so it is labelled
+ * Away and always carries its return date.
  */
 
 export type AvailabilityState =
@@ -53,18 +67,22 @@ export type Availability = {
   note: string;
   /** True when the faculty member posted this themselves. */
   selfReported: boolean;
+  /** ISO datetime the posted status runs until, when one was given. */
+  until: string | null;
+  /** True when the override spans more than a day — an absence, not a moment. */
+  longAbsence: boolean;
 };
 
 const MINUTES_PER_DAY = 1440;
+const A_DAY_MS = 24 * 60 * 60 * 1000;
 
 const MANUAL_STATES = new Set(["available", "unavailable", "office_hours"]);
 
-function isManualActive(manual: ManualStatus, now: Date): boolean {
-  if (!manual.manual_status || !MANUAL_STATES.has(manual.manual_status)) return false;
-  if (!manual.manual_until) return true; // no expiry set — stands until cleared
-  const until = new Date(manual.manual_until.replace(" ", "T"));
-  if (Number.isNaN(until.getTime())) return true;
-  return until.getTime() > now.getTime();
+function activeManual(manual: ManualStatus, now: Date): { until: Date | null } | null {
+  if (!manual.manual_status || !MANUAL_STATES.has(manual.manual_status)) return null;
+  const until = parseStored(manual.manual_until);
+  if (!until) return { until: null }; // no expiry — stands until cleared
+  return until.getTime() > now.getTime() ? { until } : null;
 }
 
 /** The window containing `now`, if any. */
@@ -86,7 +104,7 @@ export function findNextWindow(
 
   for (const h of hours) {
     // How many whole days until this weekday comes around again.
-    let dayOffset = (h.weekday - now.weekday + 7) % 7;
+    const dayOffset = (h.weekday - now.weekday + 7) % 7;
     let minutesAway = dayOffset * MINUTES_PER_DAY + h.start_minute - now.minute;
     // Already started or passed today — roll it to next week.
     if (minutesAway <= 0) minutesAway += 7 * MINUTES_PER_DAY;
@@ -116,51 +134,72 @@ export function resolveAvailability(
       )} (${humanizeGap(nextWindow.minutesAway)}).`
     : "No office hours are published yet.";
 
-  if (isManualActive(manual, at)) {
+  const active = activeManual(manual, at);
+
+  if (active) {
     const state = manual.manual_status as AvailabilityState;
-    if (state === "available") {
-      return {
-        state,
-        source: "faculty",
-        label: "Available",
-        dot: "green",
-        detail: note || "Posted as available for consultation right now.",
-        currentWindow,
-        nextWindow,
-        note,
-        selfReported: true,
-      };
-    }
-    if (state === "unavailable") {
-      return {
-        state,
-        source: "faculty",
-        label: "Unavailable",
-        dot: "red",
-        detail: note || `Posted as away. ${nextSentence}`,
-        currentWindow,
-        nextWindow,
-        note,
-        selfReported: true,
-      };
-    }
-    return {
-      state: "office_hours",
-      source: "faculty",
-      label: "In office hours",
-      dot: "amber",
-      detail: note || "Holding office hours — drop by.",
+    const until = active.until;
+    const untilIso = until ? until.toISOString() : null;
+    // More than a day out is an absence, not a passing status.
+    const longAbsence = Boolean(until && until.getTime() - at.getTime() > A_DAY_MS);
+    const base = {
+      source: "faculty" as const,
       currentWindow,
       nextWindow,
       note,
       selfReported: true,
+      until: untilIso,
+      longAbsence,
+    };
+
+    if (state === "available") {
+      return {
+        ...base,
+        state,
+        label: "Available",
+        dot: "green",
+        detail: note || "Posted as available for consultation right now.",
+      };
+    }
+
+    if (state === "unavailable") {
+      // The one thing a student actually needs from a long absence is the date
+      // they can come back, so it leads — before any note.
+      const returns = longAbsence
+        ? `Away until ${formatDate(until)}.`
+        : until
+          ? `Away until ${formatDateTime(until)}.`
+          : "Posted as away.";
+      return {
+        ...base,
+        state,
+        label: longAbsence ? "Away" : "Unavailable",
+        dot: "red",
+        detail: note ? `${returns} ${note}` : `${returns} ${nextSentence}`,
+      };
+    }
+
+    return {
+      ...base,
+      state: "office_hours",
+      label: "In office hours",
+      dot: "amber",
+      detail: note || "Holding office hours — drop by.",
     };
   }
 
+  const scheduled = {
+    source: "schedule" as const,
+    note,
+    selfReported: false,
+    until: null,
+    longAbsence: false,
+  };
+
   if (currentWindow) {
     return {
+      ...scheduled,
       state: "office_hours",
-      source: "schedule",
       label: "In office hours",
       dot: "amber",
       detail: `Scheduled office hours until ${formatRange(
@@ -169,13 +208,12 @@ export function resolveAvailability(
       ).split(" – ")[1]}. Expected in office — not confirmed by them.`,
       currentWindow,
       nextWindow,
-      note,
-      selfReported: false,
     };
   }
 
   if (sorted.length === 0) {
     return {
+      ...scheduled,
       state: "no_schedule",
       source: "none",
       label: "No schedule posted",
@@ -183,21 +221,17 @@ export function resolveAvailability(
       detail: "This faculty member has not published office hours. Contact the department office.",
       currentWindow: null,
       nextWindow: null,
-      note,
-      selfReported: false,
     };
   }
 
   return {
+    ...scheduled,
     state: "outside_hours",
-    source: "schedule",
     label: "Outside office hours",
     dot: "gray",
     detail: nextSentence,
     currentWindow: null,
     nextWindow,
-    note,
-    selfReported: false,
   };
 }
 

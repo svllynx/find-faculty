@@ -1,11 +1,12 @@
 # FIND — Faculty Information & Navigate Direction
 
-A centralized web directory that answers one question a student asks constantly:
+A centralized web directory for the **College of Computer Science (CCIS)** that
+answers one question a student asks constantly:
 **"Where and when can I find Professor ___?"**
 
-Instead of asking classmates, walking the halls, or checking each department's
-bulletin board, a student searches once and gets the office, the office hours,
-the current availability and the walking directions on one page.
+Instead of asking classmates, walking the halls, or checking the CCIS bulletin
+board, a student searches once and gets the office, the office hours, the
+current availability and a floor plan of the corridor on one page.
 
 **Live demo: https://find-faculty-tau.vercel.app**
 Sign in as `admin@campus.edu.ph` / `admin1234` to try the maintainer side. The
@@ -17,8 +18,8 @@ FIND is an **information and scheduling system**, not a tracking system.
 
 It will tell a student:
 
-> **Juan Santos** — Associate Professor, College of Computer Studies
-> 📍 Faculty Building — Room 204
+> **Juan Santos** — Associate Professor, Computer Science (CCIS)
+> 📍 CCIS Building — Room 1, 1st floor
 > 🕐 Office Hours: Mon & Wed 1:00 PM – 3:00 PM, Fri 9:00 AM – 11:00 AM
 > 🟡 In office hours
 
@@ -29,6 +30,7 @@ codebase. A status can only come from two places:
 | Source | Badge | Meaning |
 |---|---|---|
 | The faculty member posted it themselves | 🟢 Available / 🔴 Unavailable | "They said so" |
+| A posted absence longer than a day | 🔴 Away until *date* | "They said so, and said when they are back" |
 | Their published office-hours schedule | 🟡 In office hours | "Their timetable says so — expected, not confirmed" |
 | Neither | ⚪ Outside office hours / No schedule posted | Nothing is being claimed |
 
@@ -37,12 +39,71 @@ how much to trust it before walking across campus. This rule is enforced in one
 place — [`src/lib/availability.ts`](src/lib/availability.ts) — and pinned down by
 the tests in [`src/tests/availability.test.ts`](src/tests/availability.test.ts).
 
+## Scope
+
+FIND currently covers **one college in one building**: CCIS, in the CCIS
+Building. That is a deliberate narrowing, not a limitation of the data model —
+`buildings`, `departments` and `rooms` are all ordinary tables, so a second
+college or a second building is rows, not a rewrite.
+
+Within CCIS there are three departments: **Computer Science (CS)**,
+**Information Technology (IT)** and **Information Systems (IS)**.
+
+> The seed spells CCIS out as "College of Computer Science", following the
+> wording in the brief. If your CCIS is *Computing and Information Sciences*,
+> that string lives in one place — `college_name` in
+> [`src/lib/campus-seed.mjs`](src/lib/campus-seed.mjs).
+
+## The floor plan
+
+Finding the building is the easy part; finding Room 7 is not. So the map is the
+**inside** of the building rather than the campus: one corridor, rooms down both
+sides, the entrance on the left, stairs and restrooms at the far end, and the
+destination lit up.
+
+Rooms are rows in a `rooms` table carrying their own geometry
+(`map_x`, `map_y`, `map_w`, `map_h` in a 200×104 space), so **moving a room on
+the map is a row edit, not a code change** — and the directory can never point
+at a room the map does not have, because a faculty member's office *is* a room
+row. The corridor, entrance and stairs are building structure and are drawn by
+[`FloorMap`](src/components/FloorMap.tsx).
+
+The 1st floor ships with Rooms 1–12. Extra floors need only rows: `listFloors`
+picks them up and the floor switcher and search filter appear on their own.
+
+## Profile photos
+
+Every faculty member gets a placeholder — their initials on a tinted disc — and
+can add a real photo whenever they like, from their own dashboard or via an
+admin. The picked file is centre-cropped and scaled to 320px **in the browser**
+and stored inline as a data URL, so FIND needs no file storage (which matters on
+a read-only host) and a 6 MB phone photo never becomes a 6 MB row.
+
+The stored value is rendered as an `img src`, so it is validated as strictly as
+any other untrusted string: a `data:image/*` URL or an `https:` link, nothing
+else. `javascript:` and non-image data URLs are refused.
+
+## Absence overrides
+
+A status that only covers "right now" cannot express a seminar week or a month
+of leave, so an override carries an end:
+
+- **Just for now** — 1 hour, 2 hours, 4 hours, the rest of today
+- **Away for longer** — 1 day, 3 days, 1 week, 2 weeks, 1 month, a date you pick,
+  or until you clear it
+
+Past a day, the badge changes from *Unavailable* to **Away**, and the detail
+leads with the return date — because what a student needs then is not "not now"
+but "not until the 3rd". Every override **lapses on its own**, so a status set
+before a conference is not still misleading people three weeks later. The
+editor shows the exact sentence students will read before it is saved.
+
 ## Who uses it
 
 | Role | Signs in? | Can do |
 |---|---|---|
 | **Student** | No | Search, view offices, hours, availability and directions |
-| **Faculty** | Yes | Publish their own office hours, post their own availability, keep their office/contact details current |
+| **Faculty** | Yes | Publish their own office hours, post availability and absence overrides, add a profile photo, keep their room and contact details current |
 | **Department admin** | Yes | Everything above for any record, plus add/rename/archive records and read the change log |
 
 ## Running it
@@ -52,7 +113,7 @@ database server to install and no native module to compile).
 
 ```bash
 npm install
-npm run seed     # creates data/find.db with a demo campus
+npm run seed     # creates data/find.db with the demo CCIS building
 npm run dev      # http://localhost:3100
 ```
 
@@ -73,9 +134,9 @@ Demo accounts created by the seed:
 npm run dev        # dev server on :3100
 npm run build      # production build
 npm run start      # production server on :3100
-npm run seed       # reset the database to the demo campus (ids are stable)
-npm test           # 92 unit tests (Vitest)
-npm run smoke      # 67 end-to-end checks against a running server
+npm run seed       # reset the database to the demo building (ids are stable)
+npm test           # 131 unit tests (Vitest)
+npm run smoke      # 96 end-to-end checks against a running server
 npm run typecheck  # tsc --noEmit
 ```
 
@@ -110,12 +171,12 @@ demo records into it.
 
 | Route | For | What it does |
 |---|---|---|
-| `/` | Students | One search box + filters (department, building, weekday, "available now") |
-| `/faculty/[id]` | Students | Office, weekly hours table, live availability, numbered walking directions, campus map with the building pinned |
-| `/map` | Students | Schematic campus plan, building landmarks/entrances, department offices |
+| `/` | Students | One search box + filters (department, floor, weekday, "available now") |
+| `/faculty/[id]` | Students | Photo, office and room, weekly hours, live availability, absence notice, numbered directions, floor plan with the room pinned |
+| `/map` | Students | The floor plan itself — tap a room to see who sits in it; room directory and department offices |
 | `/login` | Staff | Faculty and admin sign-in |
-| `/dashboard` | Faculty | Post availability, edit weekly office hours, update office details |
-| `/admin` | Admin | All records (incl. archived), add/rename/archive, edit anyone's hours, change log |
+| `/dashboard` | Faculty | Post availability and absence overrides, edit weekly hours, add a photo, pick their room |
+| `/admin` | Admin | All records (incl. archived), add/rename/archive, edit anyone's hours, photo and override, change log |
 
 The search is a plain GET form, so **every result set is a shareable URL** and the
 page still works with JavaScript disabled.
@@ -126,8 +187,9 @@ Read endpoints are public; every write requires a session.
 
 | Method | Path | Who |
 |---|---|---|
-| `GET` | `/api/faculty?q=&department=&building=&day=&openNow=1` | Anyone |
+| `GET` | `/api/faculty?q=&department=&floor=&day=&openNow=1` | Anyone |
 | `GET` | `/api/faculty/:id` | Anyone |
+| `GET` | `/api/rooms[?floor=1]` — the floor plan as data | Anyone |
 | `GET` | `/api/departments`, `/api/buildings` | Anyone |
 | `POST` | `/api/auth/login`, `/api/auth/logout`, `GET /api/auth/me` | Anyone |
 | `PATCH` | `/api/faculty/:id` | Own record, or admin |
@@ -146,19 +208,24 @@ Read endpoints are public; every write requires a session.
     "id": 1,
     "name": "Juan Santos",
     "title": "Associate Professor",
-    "department": "College of Computer Studies",
+    "photo": null,
+    "college": "College of Computer Science",
+    "department": "Computer Science",
+    "departmentCode": "CS",
     "office": {
-      "building": "Faculty Building", "buildingCode": "FB",
-      "room": "204", "floor": "2nd floor",
-      "label": "Faculty Building — Room 204",
-      "landmark": "Behind the Main Quadrangle, beside the flagpole",
-      "entrance": "Main entrance faces the quadrangle; the stairs are on your left as you enter"
+      "building": "CCIS Building", "buildingCode": "CCIS",
+      "roomId": 1, "room": "1", "roomName": "CCIS Faculty Office",
+      "floor": 1, "floorLabel": "1st floor",
+      "label": "CCIS Building — Room 1",
+      "landmark": "Beside the Engineering Hall, facing the main quadrangle",
+      "entrance": "Use the main entrance on the quadrangle side; the corridor starts right past the lobby",
+      "note": "First door on your left as you enter the corridor."
     },
-    "subjects": ["Data Structures", "Algorithms", "CS Thesis 1"],
+    "subjects": ["Data Structures", "Design and Analysis of Algorithms", "CS Thesis 1"],
     "officeHours": [{ "weekday": 1, "start_minute": 780, "end_minute": 900, "location_note": "" }],
     "availability": {
       "state": "office_hours", "source": "schedule", "label": "In office hours",
-      "dot": "amber", "selfReported": false,
+      "dot": "amber", "selfReported": false, "until": null, "longAbsence": false,
       "detail": "Scheduled office hours until 3:00 PM. Expected in office — not confirmed by them."
     }
   }]
@@ -171,7 +238,7 @@ Read endpoints are public; every write requires a session.
 src/
   lib/
     schema.mjs        the whole data model, applied idempotently on first connect
-    campus-seed.mjs   the demo campus, shared by the CLI seeder and boot-time seeding
+    campus-seed.mjs   the demo CCIS building, shared by the CLI seeder and boot-time seeding
     db.ts             one SQLite connection + row normalisation + transactions
     availability.ts   PURE: schedule + posted status -> what students see
     time.ts           PURE: campus timezone, minute<->label formatting
@@ -197,6 +264,9 @@ scripts/
 - **Office hours are integers**, not strings: `(weekday, start_minute, end_minute)`.
   "Is a window open right now?" is then an indexed integer comparison, and
   formatting is a display concern.
+- **A room is a row, not a string.** `faculty.room_id` points at a `rooms` row
+  that carries the floor and the map geometry, so the directory, the directions
+  and the floor plan cannot disagree about where someone sits.
 - **Availability is derived**, never stored, except for the voluntary
   `manual_status` override — which carries a `manual_until` expiry so a status
   forgotten on a Friday is not still misleading students on Monday.
@@ -217,6 +287,11 @@ scripts/
   hand. `npm run smoke` asserts all nine of those refusals.
 - Every query is parameterized, and search text has its LIKE metacharacters
   escaped, so `%` finds a literal percent sign instead of the whole directory.
+  Queries of three characters or fewer match codes and room numbers exactly
+  rather than by substring, so searching `IT` finds the department instead of
+  every subject containing those two letters.
+- A profile photo is validated before it is stored, because it is rendered as an
+  `img src`: `data:image/*` or `https:` only.
 - Writes require a JSON body and a same-site cookie, which is what keeps a
   cross-site form from posting on a signed-in user's behalf.
 
@@ -226,7 +301,8 @@ WCAG 2.1 AA is the floor: semantic landmarks and headings, a skip link, labels o
 every control, a visible focus ring, `aria-live` on search results and on every
 save, and `prefers-reduced-motion` respected. Availability is **never** signalled
 by colour alone — each badge carries its text label and a differently *shaped*
-dot (filled / ringed / barred).
+dot (filled / ringed / barred). The floor plan is a labelled `role="img"` with
+the destination named in its description, and every room is reachable as a link.
 
 ## Configuration
 
@@ -234,5 +310,5 @@ dot (filled / ringed / barred).
 |---|---|---|
 | `FIND_DB_PATH` | `./data/find.db` | SQLite file location |
 | `FIND_TZ` | `Asia/Manila` | The campus clock used for every "is it open now" decision |
-| `FIND_AUTOSEED` | unset | Set to `0` to stop FIND seeding the demo campus into an empty database |
+| `FIND_AUTOSEED` | unset | Set to `0` to stop FIND seeding the demo building into an empty database |
 | `FIND_URL` | `http://localhost:3100` | Target for `npm run smoke` |

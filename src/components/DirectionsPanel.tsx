@@ -1,35 +1,36 @@
 import type { FacultyRecord } from "@/lib/faculty";
 
 /**
- * Turn-by-turn-ish directions, assembled from the building's landmark and
- * entrance notes plus the floor and room. Written as numbered steps because
- * that is how a student actually walks it: find the building, get inside, go up,
- * find the door.
+ * Directions, written as the walk actually goes: find the building, get in,
+ * reach the right floor, then find the door. The last two steps are the ones a
+ * campus map cannot give you, so they carry the room name and any door note.
  */
 export default function DirectionsPanel({ faculty }: { faculty: FacultyRecord }) {
-  if (!faculty.building_name) {
+  if (!faculty.room_number) {
     return (
       <p className="text-sm text-muted">
         No office has been assigned to this record yet. Ask at the{" "}
-        {faculty.department_name ?? "department"} office.
+        {faculty.department_name ? `${faculty.department_name} department` : "department"} office, or
+        email {faculty.full_name.split(/\s+/)[0]} to arrange a place to meet.
       </p>
     );
   }
 
+  const building = faculty.building_name ?? "the building";
+  const code = faculty.building_code;
+
   const steps = [
     faculty.building_landmark
-      ? `Head to the ${faculty.building_name} (${faculty.building_code}) — ${lowerFirst(
-          faculty.building_landmark,
-        )}.`
-      : `Head to the ${faculty.building_name} (${faculty.building_code}).`,
+      ? `Head to the ${building}${code ? ` (${code})` : ""} — ${lowerFirst(faculty.building_landmark)}.`
+      : `Head to the ${building}${code ? ` (${code})` : ""}.`,
     faculty.building_entrance || "Enter through the main entrance.",
-    faculty.floor ? `Go to the ${faculty.floor}.` : null,
-    faculty.room
-      ? `Look for Room ${faculty.room}${
-          faculty.building_code ? ` — the door plate reads ${faculty.building_code}-${faculty.room}` : ""
-        }.`
-      : null,
-  ].filter((step): step is string => Boolean(step));
+    faculty.room_floor === 1
+      ? "Stay on the ground floor and walk into the corridor."
+      : `Take the stairs at the far end of the corridor to the ${faculty.floorLabel}.`,
+    `Room ${faculty.room_number} is on the ${faculty.room_floor === 1 ? "1st" : faculty.floorLabel} floor corridor${
+      faculty.room_name ? ` — the door is signed “${faculty.room_name}”` : ""
+    }.${faculty.room_note ? ` ${faculty.room_note}` : ""}`,
+  ];
 
   return (
     <div>
@@ -48,8 +49,8 @@ export default function DirectionsPanel({ faculty }: { faculty: FacultyRecord })
       </ol>
 
       <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
-        Can&rsquo;t find the room? The {faculty.department_name ?? "department"} office can point you
-        to it.
+        Can&rsquo;t find the room? Room 1 (the CCIS Faculty Office) is the first door on the left and
+        can point you to it.
       </p>
     </div>
   );

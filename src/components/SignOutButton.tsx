@@ -27,7 +27,7 @@ export default function SignOutButton() {
       type="button"
       onClick={signOut}
       disabled={busy || pending}
-      className="rounded-md px-3 py-2 text-sm font-medium text-ink-soft hover:bg-raise disabled:opacity-50"
+      className="rounded-md px-3 py-1.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/15 hover:text-white disabled:opacity-50"
     >
       {busy || pending ? "Signing out…" : "Sign out"}
     </button>

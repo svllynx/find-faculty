@@ -77,6 +77,7 @@ describe("resolveAvailability — voluntary status overrides", () => {
     );
     expect(a.state).toBe("unavailable");
     expect(a.dot).toBe("red");
+    expect(a.detail).toContain("Out for a meeting.");
     expect(isOpenNow(a)).toBe(false);
   });
 
@@ -130,5 +131,66 @@ describe("findNextWindow", () => {
 
   it("returns null when there are no windows at all", () => {
     expect(findNextWindow([], campusNow(MONDAY_10AM))).toBeNull();
+  });
+});
+
+describe("resolveAvailability — absence overrides", () => {
+  const away = (untilIso: string | null, note = "") => ({
+    manual_status: "unavailable",
+    manual_note: note,
+    manual_until: untilIso,
+  });
+
+  const daysFrom = (base: Date, days: number) =>
+    new Date(base.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+
+  it("reads as Away, not Unavailable, once it runs past a day", () => {
+    const a = resolveAvailability(santosHours, away(daysFrom(MONDAY_2PM, 7)), MONDAY_2PM);
+    expect(a.label).toBe("Away");
+    expect(a.longAbsence).toBe(true);
+    expect(a.dot).toBe("red");
+  });
+
+  it("leads with the date they are back, before any note", () => {
+    const a = resolveAvailability(
+      santosHours,
+      away(daysFrom(MONDAY_2PM, 30), "On study leave."),
+      MONDAY_2PM,
+    );
+    expect(a.detail).toMatch(/^Away until /);
+    expect(a.detail).toContain("On study leave.");
+  });
+
+  it("stays Unavailable for a short absence", () => {
+    const a = resolveAvailability(santosHours, away(daysFrom(MONDAY_2PM, 0.1)), MONDAY_2PM);
+    expect(a.label).toBe("Unavailable");
+    expect(a.longAbsence).toBe(false);
+  });
+
+  it("exposes the end of the override so the UI can repeat it", () => {
+    const until = daysFrom(MONDAY_2PM, 7);
+    const a = resolveAvailability(santosHours, away(until), MONDAY_2PM);
+    expect(a.until).toBe(new Date(until).toISOString());
+  });
+
+  it("lapses on its own — the schedule comes back the day after it ends", () => {
+    const until = daysFrom(MONDAY_2PM, 7);
+    const after = new Date(new Date(until).getTime() + 60_000);
+    const a = resolveAvailability(santosHours, away(until), after);
+    expect(a.selfReported).toBe(false);
+    expect(a.label).not.toBe("Away");
+  });
+
+  it("has no end date when nothing was posted", () => {
+    const a = resolveAvailability(santosHours, {}, MONDAY_2PM);
+    expect(a.until).toBeNull();
+    expect(a.longAbsence).toBe(false);
+  });
+
+  it("an open-ended override is not treated as a dated absence", () => {
+    const a = resolveAvailability(santosHours, away(null), MONDAY_2PM);
+    expect(a.label).toBe("Unavailable");
+    expect(a.longAbsence).toBe(false);
+    expect(a.until).toBeNull();
   });
 });

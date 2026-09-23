@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { SHORT_WEEKDAYS } from "@/lib/time";
-import type { Building, Department } from "@/lib/faculty";
+import type { Department } from "@/lib/faculty";
 
 /**
  * The one search box.
@@ -13,12 +13,12 @@ import type { Building, Department } from "@/lib/faculty";
  */
 export default function SearchForm({
   departments,
-  buildings,
+  floors,
   initial,
 }: {
   departments: Department[];
-  buildings: Building[];
-  initial: { q: string; department: string; building: string; day: string; openNow: boolean };
+  floors: number[];
+  initial: { q: string; department: string; floor: string; day: string; openNow: boolean };
 }) {
   const form = useRef<HTMLFormElement>(null);
   const submit = () => form.current?.requestSubmit();
@@ -41,7 +41,7 @@ export default function SearchForm({
             name="q"
             type="search"
             defaultValue={initial.q}
-            placeholder="Try “Santos”, “Calculus”, “CCS”, or “Room 204”"
+            placeholder="Try “Santos”, “Algorithms”, “IT”, or “Room 7”"
             autoComplete="off"
             className="field py-3 pl-10 text-base"
           />
@@ -63,30 +63,30 @@ export default function SearchForm({
             onChange={submit}
             className="field"
           >
-            <option value="">All departments</option>
+            <option value="">All CCIS departments</option>
             {departments.map((d) => (
               <option key={d.code} value={d.code}>
-                {d.name}
+                {d.name} ({d.code})
               </option>
             ))}
           </select>
         </div>
 
         <div>
-          <label htmlFor="building" className="label">
-            Building
+          <label htmlFor="floor" className="label">
+            Floor
           </label>
           <select
-            id="building"
-            name="building"
-            defaultValue={initial.building}
+            id="floor"
+            name="floor"
+            defaultValue={initial.floor}
             onChange={submit}
             className="field"
           >
-            <option value="">Anywhere on campus</option>
-            {buildings.map((b) => (
-              <option key={b.code} value={b.code}>
-                {b.name}
+            <option value="">Any floor</option>
+            {floors.map((floor) => (
+              <option key={floor} value={String(floor)}>
+                {floor === 1 ? "1st" : `${floor}th`} floor
               </option>
             ))}
           </select>

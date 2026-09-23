@@ -5,6 +5,9 @@ import { resolveAvailability, isOpenNow, type Availability, type OfficeHour } fr
 /**
  * Read/query layer. Every query is parameterized — search text is never
  * concatenated into SQL.
+ *
+ * A faculty member's office is a room row, not free text, so the directory and
+ * the floor plan are always describing the same place.
  */
 
 export type Building = {
@@ -13,26 +16,42 @@ export type Building = {
   name: string;
   landmark: string;
   entrance: string;
-  map_x: number;
-  map_y: number;
+  floors: number;
 };
 
 export type Department = {
   id: number;
   code: string;
   name: string;
+  college_code: string;
+  college_name: string;
   office: string;
   building_id: number | null;
   building_name: string | null;
   building_code: string | null;
 };
 
+export type Room = {
+  id: number;
+  building_id: number;
+  floor: number;
+  number: string;
+  name: string;
+  kind: "office" | "lab" | "lecture" | "facility";
+  map_x: number;
+  map_y: number;
+  map_w: number;
+  map_h: number;
+  note: string;
+};
+
+export type RoomWithOccupants = Room & { occupants: number };
+
 export type FacultyRow = {
   id: number;
   full_name: string;
   title: string;
-  room: string;
-  floor: string;
+  photo_url: string;
   email: string;
   phone: string;
   subjects: string;
@@ -46,13 +65,19 @@ export type FacultyRow = {
   department_id: number | null;
   department_name: string | null;
   department_code: string | null;
+  college_code: string | null;
+  college_name: string | null;
+  room_id: number | null;
+  room_number: string | null;
+  room_name: string | null;
+  room_kind: string | null;
+  room_floor: number | null;
+  room_note: string | null;
   building_id: number | null;
   building_name: string | null;
   building_code: string | null;
   building_landmark: string | null;
   building_entrance: string | null;
-  building_map_x: number | null;
-  building_map_y: number | null;
 };
 
 export type FacultyRecord = Omit<FacultyRow, "is_active"> & {
@@ -60,37 +85,51 @@ export type FacultyRecord = Omit<FacultyRow, "is_active"> & {
   subjectList: string[];
   officeHours: OfficeHour[];
   availability: Availability;
+  /** "CCIS Building — Room 1", or a plain statement that no office is assigned. */
   officeLabel: string;
+  /** "1st floor", or "" when there is no room yet. */
+  floorLabel: string;
 };
 
 export type SearchFilters = {
   q?: string;
-  department?: string; // department code
-  building?: string; // building code
+  department?: string; // department code (CS / IT / IS)
+  floor?: number; // only faculty whose office is on this floor
   weekday?: number; // only faculty with hours on this weekday
   openNow?: boolean; // only faculty a student could visit right now
   includeInactive?: boolean;
 };
 
 const SELECT_FACULTY = `
-  SELECT f.id, f.full_name, f.title, f.room, f.floor, f.email, f.phone, f.subjects,
+  SELECT f.id, f.full_name, f.title, f.photo_url, f.email, f.phone, f.subjects,
          f.consultation_note, f.manual_status, f.manual_note, f.manual_until,
          f.manual_set_at, f.is_active, f.updated_at,
          f.department_id, d.name AS department_name, d.code AS department_code,
-         f.building_id,  b.name AS building_name,   b.code AS building_code,
-         b.landmark AS building_landmark, b.entrance AS building_entrance,
-         b.map_x AS building_map_x, b.map_y AS building_map_y
+         d.college_code, d.college_name,
+         f.room_id, r.number AS room_number, r.name AS room_name, r.kind AS room_kind,
+         r.floor AS room_floor, r.note AS room_note,
+         b.id AS building_id, b.name AS building_name, b.code AS building_code,
+         b.landmark AS building_landmark, b.entrance AS building_entrance
     FROM faculty f
     LEFT JOIN departments d ON d.id = f.department_id
-    LEFT JOIN buildings   b ON b.id = f.building_id
+    LEFT JOIN rooms       r ON r.id = f.room_id
+    LEFT JOIN buildings   b ON b.id = r.building_id
 `;
 
+/** "1st floor", "2nd floor", "3rd floor", ... */
+export function floorLabel(floor: number | null | undefined): string {
+  if (floor === null || floor === undefined) return "";
+  const suffix =
+    floor % 100 >= 11 && floor % 100 <= 13
+      ? "th"
+      : { 1: "st", 2: "nd", 3: "rd" }[floor % 10] ?? "th";
+  return `${floor}${suffix} floor`;
+}
+
 function officeLabel(record: FacultyRow): string {
-  const parts: string[] = [];
-  if (record.building_name) parts.push(record.building_name);
-  if (record.room) parts.push(`Room ${record.room}`);
-  if (parts.length === 0) return "Office not yet assigned";
-  return parts.join(" — ");
+  if (!record.room_number) return "Office not yet assigned";
+  const building = record.building_name ? `${record.building_name} — ` : "";
+  return `${building}Room ${record.room_number}`;
 }
 
 function hydrate(db: DatabaseSync, record: FacultyRow, at: Date): FacultyRecord {
@@ -114,14 +153,20 @@ function hydrate(db: DatabaseSync, record: FacultyRow, at: Date): FacultyRecord 
     officeHours,
     availability: resolveAvailability(officeHours, record, at),
     officeLabel: officeLabel(record),
+    floorLabel: floorLabel(record.room_floor),
   };
 }
 
 export function listBuildings(db: DatabaseSync): Building[] {
   return rows<Building>(
-    db
-      .prepare("SELECT id, code, name, landmark, entrance, map_x, map_y FROM buildings ORDER BY name")
-      .all(),
+    db.prepare("SELECT id, code, name, landmark, entrance, floors FROM buildings ORDER BY name").all(),
+  );
+}
+
+/** The single building FIND currently covers, or null before one is set up. */
+export function primaryBuilding(db: DatabaseSync): Building | null {
+  return row<Building>(
+    db.prepare("SELECT id, code, name, landmark, entrance, floors FROM buildings ORDER BY id LIMIT 1").get(),
   );
 }
 
@@ -129,7 +174,7 @@ export function listDepartments(db: DatabaseSync): Department[] {
   return rows<Department>(
     db
       .prepare(
-        `SELECT d.id, d.code, d.name, d.office, d.building_id,
+        `SELECT d.id, d.code, d.name, d.college_code, d.college_name, d.office, d.building_id,
                 b.name AS building_name, b.code AS building_code
            FROM departments d LEFT JOIN buildings b ON b.id = d.building_id
           ORDER BY d.name`,
@@ -138,22 +183,58 @@ export function listDepartments(db: DatabaseSync): Department[] {
   );
 }
 
+/** Rooms on a floor, in door order, with how many faculty sit in each. */
+export function listRooms(db: DatabaseSync, floor?: number): RoomWithOccupants[] {
+  const where = floor === undefined ? "" : "WHERE r.floor = ?";
+  const params = floor === undefined ? [] : [floor];
+  return rows<RoomWithOccupants>(
+    db
+      .prepare(
+        `SELECT r.id, r.building_id, r.floor, r.number, r.name, r.kind,
+                r.map_x, r.map_y, r.map_w, r.map_h, r.note,
+                (SELECT COUNT(*) FROM faculty f WHERE f.room_id = r.id AND f.is_active = 1) AS occupants
+           FROM rooms r ${where}
+          ORDER BY r.floor, CAST(r.number AS INTEGER), r.number`,
+      )
+      .all(...params),
+  );
+}
+
+/** Which floors have rooms mapped, for the floor switcher and search filter. */
+export function listFloors(db: DatabaseSync): number[] {
+  return rows<{ floor: number }>(
+    db.prepare("SELECT DISTINCT floor FROM rooms ORDER BY floor").all(),
+  ).map((r) => Number(r.floor));
+}
+
 export function getFaculty(db: DatabaseSync, id: number, at: Date = new Date()): FacultyRecord | null {
   const record = row<FacultyRow>(db.prepare(`${SELECT_FACULTY} WHERE f.id = ?`).get(id));
   return record ? hydrate(db, record, at) : null;
 }
 
+/** Everyone whose office is a given room — the floor plan links to this. */
+export function facultyInRoom(
+  db: DatabaseSync,
+  roomId: number,
+  at: Date = new Date(),
+): FacultyRecord[] {
+  const found = rows<FacultyRow>(
+    db.prepare(`${SELECT_FACULTY} WHERE f.room_id = ? AND f.is_active = 1 ORDER BY f.full_name`).all(roomId),
+  );
+  return found.map((record) => hydrate(db, record, at));
+}
+
+/** At or under this length, a query is treated as a code rather than free text. */
+const SHORT_QUERY = 3;
+
 /** Neutralise LIKE metacharacters in user input. Must escape the escape char first. */
 function escapeLike(value: string): string {
-  return value
-    .replace(/!/g, "!!")
-    .replace(/%/g, "!%")
-    .replace(/_/g, "!_");
+  return value.replace(/!/g, "!!").replace(/%/g, "!%").replace(/_/g, "!_");
 }
 
 /**
- * Faculty search. One text box matches name, title, department, subject,
- * building or room number, because a student may only remember any one of those.
+ * Faculty search. One text box matches name, title, department, subject, room
+ * number or room name, because a student may only remember any one of those.
  */
 export function searchFaculty(
   db: DatabaseSync,
@@ -170,26 +251,42 @@ export function searchFaculty(
     // '!' is the LIKE escape character, so a student typing '%' or '_' searches
     // for that literal character instead of matching the whole directory.
     const like = `%${escapeLike(q)}%`;
-    where.push(`(
-         f.full_name LIKE ? ESCAPE '!'
-      OR f.title     LIKE ? ESCAPE '!'
-      OR f.subjects  LIKE ? ESCAPE '!'
-      OR f.room      LIKE ? ESCAPE '!'
-      OR d.name      LIKE ? ESCAPE '!'
-      OR d.code      LIKE ? ESCAPE '!'
-      OR b.name      LIKE ? ESCAPE '!'
-      OR b.code      LIKE ? ESCAPE '!'
-    )`);
-    params.push(like, like, like, like, like, like, like, like);
+
+    if (q.length <= SHORT_QUERY) {
+      // A very short query is almost always a code or a room number -- "IT",
+      // "CS", "7". Substring-matching those would drag in every subject that
+      // merely contains the letters (an "IT" search hitting "Algorithms"), so
+      // short queries match codes and room numbers exactly, and names by prefix.
+      where.push(`(
+           d.code = ? COLLATE NOCASE
+        OR b.code = ? COLLATE NOCASE
+        OR r.number = ? COLLATE NOCASE
+        OR f.full_name LIKE ? ESCAPE '!'
+      )`);
+      params.push(q, q, q, `${escapeLike(q)}%`);
+    } else {
+      where.push(`(
+           f.full_name LIKE ? ESCAPE '!'
+        OR f.title     LIKE ? ESCAPE '!'
+        OR f.subjects  LIKE ? ESCAPE '!'
+        OR r.number    LIKE ? ESCAPE '!'
+        OR r.name      LIKE ? ESCAPE '!'
+        OR d.name      LIKE ? ESCAPE '!'
+        OR d.code      LIKE ? ESCAPE '!'
+        OR b.name      LIKE ? ESCAPE '!'
+        OR b.code      LIKE ? ESCAPE '!'
+      )`);
+      params.push(like, like, like, like, like, like, like, like, like);
+    }
   }
 
   if (filters.department) {
     where.push("d.code = ?");
     params.push(filters.department);
   }
-  if (filters.building) {
-    where.push("b.code = ?");
-    params.push(filters.building);
+  if (typeof filters.floor === "number") {
+    where.push("r.floor = ?");
+    params.push(filters.floor);
   }
   if (typeof filters.weekday === "number") {
     where.push("EXISTS (SELECT 1 FROM office_hours oh WHERE oh.faculty_id = f.id AND oh.weekday = ?)");

@@ -4,6 +4,8 @@ import {
   createFaculty,
   createFacultySchema,
   officeHoursSchema,
+  overrideEndsAt,
+  photoSchema,
   profileSchema,
   replaceOfficeHours,
   setFacultyActive,
@@ -11,7 +13,7 @@ import {
   statusSchema,
   updateFacultyProfile,
 } from "../lib/mutations";
-import { getFaculty, searchFaculty } from "../lib/faculty";
+import { getFaculty, listRooms, searchFaculty } from "../lib/faculty";
 import { MONDAY_10AM, MONDAY_2PM, seedTestDb } from "./fixtures";
 import type { SessionUser } from "../lib/auth";
 
@@ -35,12 +37,27 @@ const audit = () =>
     faculty_id: number | null;
   }[];
 
+/** Build a full status payload; tests override only what they care about. */
+const status = (
+  manual_status: "available" | "unavailable" | "office_hours" | null,
+  extra: Partial<{ manual_note: string; expires_in_minutes: number | null; expires_at: string | null }> = {},
+) => ({
+  manual_status,
+  manual_note: "",
+  expires_in_minutes: null,
+  expires_at: null,
+  ...extra,
+});
+
+const inDays = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
 describe("office-hours validation", () => {
   it("accepts a normal weekly block", () => {
-    const parsed = officeHoursSchema.safeParse([
-      { weekday: 1, start_minute: 540, end_minute: 660, location_note: "" },
-    ]);
-    expect(parsed.success).toBe(true);
+    expect(
+      officeHoursSchema.safeParse([
+        { weekday: 1, start_minute: 540, end_minute: 660, location_note: "" },
+      ]).success,
+    ).toBe(true);
   });
 
   it("rejects an end time at or before the start time", () => {
@@ -100,8 +117,7 @@ describe("profile validation", () => {
   });
 
   it("trims incidental whitespace", () => {
-    const parsed = profileSchema.parse({ full_name: "  Juan Santos  " });
-    expect(parsed.full_name).toBe("Juan Santos");
+    expect(profileSchema.parse({ full_name: "  Juan Santos  " }).full_name).toBe("Juan Santos");
   });
 
   it("requires a name when creating a record from scratch", () => {
@@ -110,14 +126,50 @@ describe("profile validation", () => {
   });
 });
 
+describe("profile photo validation", () => {
+  it("accepts an uploaded image as a data URL", () => {
+    expect(photoSchema.safeParse("data:image/jpeg;base64,/9j/4AAQSkZJRg==").success).toBe(true);
+    expect(photoSchema.safeParse("data:image/png;base64,iVBORw0KGgo=").success).toBe(true);
+  });
+
+  it("accepts an https link and an empty value", () => {
+    expect(photoSchema.safeParse("https://example.edu/photo.jpg").success).toBe(true);
+    expect(photoSchema.safeParse("").success).toBe(true);
+  });
+
+  it("refuses anything that is not an image — this string becomes an img src", () => {
+    expect(photoSchema.safeParse("javascript:alert(1)").success).toBe(false);
+    expect(photoSchema.safeParse("data:text/html;base64,PHNjcmlwdD4=").success).toBe(false);
+    expect(photoSchema.safeParse("http://example.edu/photo.jpg").success).toBe(false);
+  });
+
+  it("refuses an image too large to keep in a row", () => {
+    const huge = `data:image/jpeg;base64,${"A".repeat(400_001)}`;
+    expect(photoSchema.safeParse(huge).success).toBe(false);
+  });
+
+  it("stores a photo and hands it back to the profile", () => {
+    const photo = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+    updateFacultyProfile(db, 1, { photo_url: photo }, actor);
+    expect(getFaculty(db, 1, MONDAY_2PM)!.photo_url).toBe(photo);
+
+    updateFacultyProfile(db, 1, { photo_url: "" }, actor);
+    expect(getFaculty(db, 1, MONDAY_2PM)!.photo_url).toBe("");
+  });
+
+  it("keeps the photo data itself out of the audit log", () => {
+    updateFacultyProfile(db, 1, { photo_url: "data:image/png;base64,iVBORw0KGgo=" }, actor);
+    const detail = db.prepare("SELECT detail FROM audit_log ORDER BY id DESC LIMIT 1").get() as {
+      detail: string;
+    };
+    expect(detail.detail).toBe("photo");
+    expect(detail.detail).not.toContain("base64");
+  });
+});
+
 describe("replaceOfficeHours", () => {
   it("replaces the whole set rather than appending duplicates", () => {
-    replaceOfficeHours(
-      db,
-      1,
-      [{ weekday: 2, start_minute: 600, end_minute: 720, location_note: "" }],
-      actor,
-    );
+    replaceOfficeHours(db, 1, [{ weekday: 2, start_minute: 600, end_minute: 720, location_note: "" }], actor);
     const santos = getFaculty(db, 1, MONDAY_2PM)!;
     expect(santos.officeHours).toHaveLength(1);
     expect(santos.officeHours[0].weekday).toBe(2);
@@ -147,29 +199,19 @@ describe("replaceOfficeHours", () => {
   });
 });
 
-describe("setManualStatus", () => {
+describe("setManualStatus — the posted status", () => {
   // Note: expiry is measured from the real clock, so tests that assert an
   // override at a FIXED evaluation date must use a status with no expiry.
   it("a posted status overrides the schedule for students", () => {
-    setManualStatus(
-      db,
-      1,
-      { manual_status: "unavailable", manual_note: "Out sick.", expires_in_minutes: null },
-      actor,
-    );
+    setManualStatus(db, 1, status("unavailable", { manual_note: "Out sick." }), actor);
     const santos = getFaculty(db, 1, MONDAY_2PM)!;
     expect(santos.availability.state).toBe("unavailable");
     expect(santos.availability.selfReported).toBe(true);
-    expect(santos.availability.detail).toBe("Out sick.");
+    expect(santos.availability.detail).toContain("Out sick.");
   });
 
   it("stores an expiry so a forgotten status does not mislead students forever", () => {
-    setManualStatus(
-      db,
-      1,
-      { manual_status: "available", manual_note: "", expires_in_minutes: 60 },
-      actor,
-    );
+    setManualStatus(db, 1, status("available", { expires_in_minutes: 60 }), actor);
     const row = db.prepare("SELECT manual_until FROM faculty WHERE id = 1").get() as {
       manual_until: string;
     };
@@ -179,26 +221,19 @@ describe("setManualStatus", () => {
   });
 
   it("stops overriding once the expiry has passed", () => {
-    setManualStatus(
-      db,
-      1,
-      { manual_status: "unavailable", manual_note: "Stepped out.", expires_in_minutes: 30 },
-      actor,
-    );
-    const inTenMinutes = new Date(Date.now() + 10 * 60_000);
-    const inTwoHours = new Date(Date.now() + 2 * 60 * 60_000);
+    setManualStatus(db, 1, status("unavailable", { manual_note: "Stepped out.", expires_in_minutes: 30 }), actor);
+    expect(getFaculty(db, 1, new Date(Date.now() + 10 * 60_000))!.availability.state).toBe("unavailable");
 
-    expect(getFaculty(db, 1, inTenMinutes)!.availability.state).toBe("unavailable");
-    const later = getFaculty(db, 1, inTwoHours)!.availability;
+    const later = getFaculty(db, 1, new Date(Date.now() + 2 * 60 * 60_000))!.availability;
     expect(later.state).not.toBe("unavailable");
     expect(later.selfReported).toBe(false);
   });
 
   it("clearing hands the badge back to the schedule and wipes the note", () => {
-    setManualStatus(db, 1, { manual_status: "available", manual_note: "Here", expires_in_minutes: null }, actor);
+    setManualStatus(db, 1, status("available", { manual_note: "Here" }), actor);
     expect(getFaculty(db, 1, MONDAY_10AM)!.availability.state).toBe("available");
 
-    setManualStatus(db, 1, { manual_status: null, manual_note: "", expires_in_minutes: null }, actor);
+    setManualStatus(db, 1, status(null), actor);
     const santos = getFaculty(db, 1, MONDAY_10AM)!;
     expect(santos.availability.state).toBe("outside_hours");
     expect(santos.manual_status).toBeNull();
@@ -208,7 +243,7 @@ describe("setManualStatus", () => {
 
   it("a green status makes someone appear in the open-now list", () => {
     expect(searchFaculty(db, { openNow: true }, MONDAY_10AM)).toHaveLength(0);
-    setManualStatus(db, 3, { manual_status: "available", manual_note: "", expires_in_minutes: null }, actor);
+    setManualStatus(db, 3, status("available"), actor);
     expect(searchFaculty(db, { openNow: true }, MONDAY_10AM).map((f) => f.full_name)).toEqual([
       "Trinidad Tecson",
     ]);
@@ -218,31 +253,100 @@ describe("setManualStatus", () => {
     expect(statusSchema.safeParse({ manual_status: "on_sabbatical" }).success).toBe(false);
     expect(statusSchema.safeParse({ manual_status: null }).success).toBe(true);
   });
+});
 
-  it("rejects an absurd expiry window", () => {
+describe("setManualStatus — the absence override", () => {
+  it("an explicit end date wins over a duration", () => {
+    const at = inDays(7);
+    expect(overrideEndsAt(status("unavailable", { expires_at: at, expires_in_minutes: 60 }))).toBe(at);
+  });
+
+  it("no end at all means the override stands until it is cleared", () => {
+    expect(overrideEndsAt(status("unavailable"))).toBeNull();
+  });
+
+  it("clearing the status clears the end date with it", () => {
+    expect(overrideEndsAt(status(null, { expires_at: inDays(7) }))).toBeNull();
+  });
+
+  it("an absence longer than a day reads as Away, with the return date", () => {
+    setManualStatus(
+      db,
+      1,
+      status("unavailable", { manual_note: "CHED accreditation visit.", expires_at: inDays(7) }),
+      actor,
+    );
+    const availability = getFaculty(db, 1, new Date())!.availability;
+    expect(availability.state).toBe("unavailable");
+    expect(availability.label).toBe("Away");
+    expect(availability.longAbsence).toBe(true);
+    expect(availability.until).not.toBeNull();
+    expect(availability.detail).toMatch(/^Away until /);
+    expect(availability.detail).toContain("CHED accreditation visit.");
+  });
+
+  it("a short absence stays Unavailable rather than Away", () => {
+    setManualStatus(db, 1, status("unavailable", { expires_in_minutes: 120 }), actor);
+    const availability = getFaculty(db, 1, new Date())!.availability;
+    expect(availability.label).toBe("Unavailable");
+    expect(availability.longAbsence).toBe(false);
+  });
+
+  it("a month-long absence is accepted; an implausible one is not", () => {
+    expect(statusSchema.safeParse({ manual_status: "unavailable", expires_at: inDays(30) }).success).toBe(true);
+    expect(statusSchema.safeParse({ manual_status: "unavailable", expires_at: inDays(500) }).success).toBe(false);
+  });
+
+  it("rejects an end date already in the past", () => {
+    expect(statusSchema.safeParse({ manual_status: "unavailable", expires_at: inDays(-1) }).success).toBe(false);
+  });
+
+  it("rejects an absurd duration", () => {
+    expect(statusSchema.safeParse({ manual_status: "available", expires_in_minutes: 1 }).success).toBe(false);
     expect(
-      statusSchema.safeParse({ manual_status: "available", expires_in_minutes: 1 }).success,
+      statusSchema.safeParse({ manual_status: "available", expires_in_minutes: 60 * 24 * 500 }).success,
     ).toBe(false);
-    expect(
-      statusSchema.safeParse({ manual_status: "available", expires_in_minutes: 60 * 24 * 400 })
-        .success,
-    ).toBe(false);
+  });
+
+  it("an away override hides someone from the open-now list during their block", () => {
+    expect(searchFaculty(db, { openNow: true }, new Date()).length).toBeGreaterThanOrEqual(0);
+    setManualStatus(db, 1, status("unavailable", { expires_at: inDays(7) }), actor);
+    expect(searchFaculty(db, { openNow: true }, new Date()).map((f) => f.full_name)).not.toContain(
+      "Juan Santos",
+    );
+  });
+
+  it("records the end date in the audit trail", () => {
+    setManualStatus(db, 1, status("unavailable", { expires_at: inDays(7) }), actor);
+    const detail = db.prepare("SELECT detail FROM audit_log ORDER BY id DESC LIMIT 1").get() as {
+      detail: string;
+    };
+    expect(detail.detail).toMatch(/^unavailable until \d{4}-\d{2}-\d{2}$/);
   });
 });
 
 describe("updateFacultyProfile", () => {
   it("updates only the fields provided", () => {
-    updateFacultyProfile(db, 1, { room: "301", floor: "3rd floor" }, actor);
+    updateFacultyProfile(db, 1, { phone: "local 999" }, actor);
     const santos = getFaculty(db, 1, MONDAY_2PM)!;
-    expect(santos.room).toBe("301");
+    expect(santos.phone).toBe("local 999");
     expect(santos.full_name).toBe("Juan Santos");
     expect(santos.email).toBe("jsantos@campus.edu.ph");
   });
 
-  it("can move a professor to another building, and search follows", () => {
-    updateFacultyProfile(db, 1, { building_id: 2 }, actor);
-    expect(getFaculty(db, 1, MONDAY_2PM)!.building_code).toBe("SCI");
-    expect(searchFaculty(db, { building: "SCI" }, MONDAY_2PM)).toHaveLength(3);
+  it("moves a professor to another room, and the floor plan follows", () => {
+    const upstairs = listRooms(db, 2)[0];
+    updateFacultyProfile(db, 1, { room_id: upstairs.id }, actor);
+    const santos = getFaculty(db, 1, MONDAY_2PM)!;
+    expect(santos.room_number).toBe("12");
+    expect(santos.room_floor).toBe(2);
+    expect(santos.floorLabel).toBe("2nd floor");
+    expect(searchFaculty(db, { floor: 2 }, MONDAY_2PM).map((f) => f.full_name)).toContain("Juan Santos");
+  });
+
+  it("can clear a room assignment", () => {
+    updateFacultyProfile(db, 1, { room_id: null }, actor);
+    expect(getFaculty(db, 1, MONDAY_2PM)!.officeLabel).toBe("Office not yet assigned");
   });
 
   it("is a no-op when handed an empty patch", () => {
@@ -252,7 +356,7 @@ describe("updateFacultyProfile", () => {
 
   it("bumps updated_at so students can see how fresh the entry is", () => {
     db.prepare("UPDATE faculty SET updated_at = '2020-01-01 00:00:00' WHERE id = 1").run();
-    updateFacultyProfile(db, 1, { room: "999" }, actor);
+    updateFacultyProfile(db, 1, { phone: "local 1" }, actor);
     expect(getFaculty(db, 1, MONDAY_2PM)!.updated_at).not.toBe("2020-01-01 00:00:00");
   });
 });
@@ -261,12 +365,13 @@ describe("createFaculty and archiving", () => {
   it("adds a searchable record", () => {
     const id = createFaculty(
       db,
-      { full_name: "Ramon Magsaysay", title: "Instructor", department_id: 1, building_id: 1, room: "215" },
+      { full_name: "Ramon Magsaysay", title: "Instructor", department_id: 1, room_id: 2 },
       actor,
     );
     expect(id).toBeGreaterThan(3);
     expect(searchFaculty(db, { q: "Magsaysay" }, MONDAY_2PM)).toHaveLength(1);
     expect(getFaculty(db, id, MONDAY_2PM)!.availability.state).toBe("no_schedule");
+    expect(getFaculty(db, id, MONDAY_2PM)!.room_number).toBe("3");
   });
 
   it("archiving hides the record from students but keeps the audit trail", () => {
@@ -289,5 +394,14 @@ describe("createFaculty and archiving", () => {
       n: number;
     };
     expect(Number(left.n)).toBe(0);
+  });
+
+  it("deleting a room leaves the faculty record, just without an office", () => {
+    db.exec("PRAGMA foreign_keys = ON");
+    db.prepare("DELETE FROM rooms WHERE id = 1").run();
+    const santos = getFaculty(db, 1, MONDAY_2PM)!;
+    expect(santos.full_name).toBe("Juan Santos");
+    expect(santos.room_id).toBeNull();
+    expect(santos.officeLabel).toBe("Office not yet assigned");
   });
 });

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getDb, rows } from "@/lib/db";
-import { getFaculty, listBuildings, listDepartments, searchFaculty } from "@/lib/faculty";
+import { getFaculty, listDepartments, listRooms, searchFaculty } from "@/lib/faculty";
 import { currentUser } from "@/lib/auth";
 import StatusBadge from "@/components/StatusBadge";
 import StatusControl from "@/components/StatusControl";
@@ -10,6 +10,8 @@ import HoursEditor from "@/components/HoursEditor";
 import ProfileForm from "@/components/ProfileForm";
 import AddFacultyForm from "@/components/AddFacultyForm";
 import ArchiveToggle from "@/components/ArchiveToggle";
+import PhotoUpload from "@/components/PhotoUpload";
+import Avatar from "@/components/Avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +52,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     selectedId !== null && Number.isInteger(selectedId) ? getFaculty(db, selectedId, now) : null;
 
   const departments = listDepartments(db);
-  const buildings = listBuildings(db);
+  const rooms = listRooms(db);
 
   const audit = rows<AuditEntry>(
     db
@@ -68,13 +70,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Manage faculty records</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Manage CCIS faculty records</h1>
           <p className="mt-1 text-sm text-muted">
             {records.filter((r) => r.is_active).length} active ·{" "}
             {records.filter((r) => !r.is_active).length} archived · signed in as {user.email}
           </p>
         </div>
-        <AddFacultyForm departments={departments} buildings={buildings} />
+        <AddFacultyForm departments={departments} rooms={rooms} />
       </header>
 
       {missingHours.length > 0 && (
@@ -122,8 +124,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     }`}
                     aria-current={active ? "true" : undefined}
                   >
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="font-semibold text-ink">{record.full_name}</span>
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Avatar name={record.full_name} photo={record.photo_url} size="sm" className="!h-7 !w-7 !text-[10px]" />
+                        <span className="truncate font-semibold text-ink">{record.full_name}</span>
+                      </span>
                       {!record.is_active && (
                         <span className="shrink-0 rounded bg-raise px-1.5 py-0.5 text-[10px] font-bold uppercase text-muted">
                           Archived
@@ -158,11 +163,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           ) : (
             <div className="space-y-6">
               <header className="card flex flex-wrap items-start justify-between gap-4 p-5">
-                <div>
-                  <h2 className="text-xl font-bold">{selected.full_name}</h2>
-                  <p className="mt-1 text-sm text-muted">
-                    {selected.title || "No title"} · {selected.department_name ?? "No department"}
-                  </p>
+                <div className="flex items-start gap-3">
+                  <Avatar name={selected.full_name} photo={selected.photo_url} size="md" />
+                  <div>
+                    <h2 className="text-xl font-bold">{selected.full_name}</h2>
+                    <p className="mt-1 text-sm text-muted">
+                      {selected.title || "No title"} · {selected.department_name ?? "No department"}
+                    </p>
+                    <p className="mt-0.5 text-sm text-muted">{selected.officeLabel}</p>
+                  </div>
                 </div>
                 <div className="flex flex-col items-start gap-2 sm:items-end">
                   <StatusBadge availability={selected.availability} />
@@ -185,8 +194,25 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                     key={`profile-${selected.id}`}
                     faculty={selected}
                     departments={departments}
-                    buildings={buildings}
+                    rooms={rooms}
                     canRename
+                  />
+                </div>
+              </section>
+
+              <section className="card p-5" aria-labelledby="admin-photo">
+                <h3 id="admin-photo" className="text-base font-semibold">
+                  Profile photo
+                </h3>
+                <p className="mt-1 text-sm text-muted">
+                  Faculty can add their own from their dashboard; you can add one on their behalf.
+                </p>
+                <div className="mt-4">
+                  <PhotoUpload
+                    key={`photo-${selected.id}`}
+                    facultyId={selected.id}
+                    name={selected.full_name}
+                    photo={selected.photo_url || null}
                   />
                 </div>
               </section>
@@ -206,10 +232,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
               <section className="card p-5" aria-labelledby="admin-status">
                 <h3 id="admin-status" className="text-base font-semibold">
-                  Availability posted on their behalf
+                  Availability &amp; absence override
                 </h3>
                 <p className="mt-1 text-sm text-muted">
-                  Only post here when the faculty member has asked you to — FIND presents this as
+                  Use the longer durations for leave, seminars or an accreditation week. Only post
+                  here when the faculty member has asked you to — FIND presents this to students as
                   something they said.
                 </p>
                 <div className="mt-4">

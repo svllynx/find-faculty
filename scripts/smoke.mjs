@@ -60,7 +60,7 @@ console.log("Student (anonymous)");
   check("home page renders", page.status === 200);
 
   const all = await api("/api/faculty");
-  check("directory lists faculty", all.status === 200 && all.body.count >= 16, `count=${all.body?.count}`);
+  check("directory lists faculty", all.status === 200 && all.body.count >= 15, `count=${all.body?.count}`);
 
   const byName = await api("/api/faculty?q=Santos");
   check(
@@ -68,23 +68,37 @@ console.log("Student (anonymous)");
     byName.body.results?.some((r) => r.name === "Juan Santos"),
   );
 
-  const bySubject = await api("/api/faculty?q=Calculus");
+  const bySubject = await api("/api/faculty?q=Algorithms");
   check("search by subject works", bySubject.body.count > 0, `count=${bySubject.body?.count}`);
 
-  const byRoom = await api("/api/faculty?q=204");
-  check("search by room number works", byRoom.body.count > 0);
+  const byRoom = await api("/api/faculty?q=1");
+  check("search by room number works", byRoom.body.count > 0, `count=${byRoom.body?.count}`);
 
-  const byDept = await api("/api/faculty?department=CCS");
-  check("department filter works", byDept.body.count === 4, `count=${byDept.body?.count}`);
+  const byRoomName = await api("/api/faculty?q=Networking%20Laboratory");
+  check("search by room name works", byRoomName.body.count > 0);
 
-  const byBuilding = await api("/api/faculty?building=ENG");
-  check("building filter works", byBuilding.body.count === 3, `count=${byBuilding.body?.count}`);
+  const byDept = await api("/api/faculty?department=CS");
+  check("department filter works", byDept.body.count === 5, `count=${byDept.body?.count}`);
+
+  const shortCode = await api("/api/faculty?q=IT");
+  check(
+    "a short query matches the department code, not every subject containing those letters",
+    shortCode.body.results?.every((r) => r.departmentCode === "IT"),
+    JSON.stringify(shortCode.body.results?.map((r) => r.departmentCode)),
+  );
+
+  const byFloor = await api("/api/faculty?floor=1");
+  check("floor filter works", byFloor.body.count >= 14, `count=${byFloor.body?.count}`);
+  check(
+    "floor filter only returns faculty on that floor",
+    byFloor.body.results?.every((r) => r.office.floor === 1),
+  );
 
   const injection = await api(`/api/faculty?q=${encodeURIComponent("'; DROP TABLE faculty; --")}`);
   const stillThere = await api("/api/faculty");
   check(
     "SQL injection attempt is treated as text",
-    injection.status === 200 && stillThere.body.count >= 16,
+    injection.status === 200 && stillThere.body.count >= 15,
   );
 
   const profile = await api("/api/faculty/1");
@@ -92,6 +106,10 @@ console.log("Student (anonymous)");
     profile.body.office?.label && Array.isArray(profile.body.officeHours) && profile.body.availability?.state,
   ));
   check("profile includes walking directions data", Boolean(profile.body.office?.entrance));
+  check("profile names the room, floor and college", Boolean(
+    profile.body.office?.room && profile.body.office?.floor && profile.body.college,
+  ), JSON.stringify(profile.body.office));
+  check("profile starts with no photo, so students see the placeholder", profile.body.photo === null);
   check("profile availability names its source", ["faculty", "schedule", "none"].includes(profile.body.availability?.source));
 
   const missing = await api("/api/faculty/99999");
@@ -201,12 +219,104 @@ console.log("\nFaculty (jsantos@campus.edu.ph)");
   const stillThree = await api("/api/faculty/1");
   check("a rejected save left the schedule untouched", stillThree.body.officeHours?.length === 3);
 
+  const rooms = await api("/api/rooms?floor=1");
+  check("rooms endpoint returns the floor plan", rooms.body.rooms?.length === 12, `rooms=${rooms.body.rooms?.length}`);
+  check("each room carries its map geometry", rooms.body.rooms?.every((r) => typeof r.map_x === "number" && r.map_w > 0));
+  check("rooms report how many faculty sit in them", rooms.body.rooms?.some((r) => r.occupants > 0));
+
+  const targetRoom = rooms.body.rooms.find((r) => r.number === "5");
   const profile = await api("/api/faculty/1", {
     method: "PATCH",
     headers: auth,
-    body: JSON.stringify({ room: "204", floor: "2nd floor" }),
+    body: JSON.stringify({ room_id: targetRoom.id }),
   });
-  check("can update own office location", profile.status === 200 && profile.body.office?.room === "204");
+  check("can move own office to another room", profile.status === 200 && profile.body.office?.room === "5");
+  check("the floor follows the room", profile.body.office?.floor === 1);
+
+  const badRoom = await api("/api/faculty/1", {
+    method: "PATCH",
+    headers: auth,
+    body: JSON.stringify({ room_id: 99999 }),
+  });
+  check("a room that does not exist is rejected (422)", badRoom.status === 422, `got ${badRoom.status}`);
+
+  // --- Profile photo ---
+  const tinyJpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
+  const photo = await api("/api/faculty/1", {
+    method: "PATCH",
+    headers: auth,
+    body: JSON.stringify({ photo_url: tinyJpeg }),
+  });
+  check("can add a profile photo", photo.status === 200 && photo.body.photo === tinyJpeg);
+
+  const seenByStudent = await api("/api/faculty/1");
+  check("students see the photo", seenByStudent.body.photo === tinyJpeg);
+
+  const badPhoto = await api("/api/faculty/1", {
+    method: "PATCH",
+    headers: auth,
+    body: JSON.stringify({ photo_url: "javascript:alert(1)" }),
+  });
+  check("a non-image photo value is rejected (422)", badPhoto.status === 422, `got ${badPhoto.status}`);
+
+  const removed = await api("/api/faculty/1", {
+    method: "PATCH",
+    headers: auth,
+    body: JSON.stringify({ photo_url: "" }),
+  });
+  check("can remove the photo again", removed.status === 200 && removed.body.photo === null);
+
+  // --- Absence override ---
+  const backOn = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const away = await api("/api/faculty/1/status", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      manual_status: "unavailable",
+      manual_note: "Smoke test - away at a seminar.",
+      expires_at: backOn,
+    }),
+  });
+  check("can post a week-long absence override", away.status === 200, `got ${away.status}`);
+  check("a long absence reads as Away", away.body.availability?.label === "Away");
+  check("the override is flagged as a long absence", away.body.availability?.longAbsence === true);
+  check("the override carries its end date", away.body.availability?.until === backOn);
+  check("the detail leads with the return date", /^Away until /.test(away.body.availability?.detail ?? ""));
+
+  const awaySeen = await api("/api/faculty/1");
+  check("students see the absence, not the timetable", awaySeen.body.availability?.state === "unavailable");
+
+  const openWhileAway = await api("/api/faculty?openNow=1");
+  check(
+    "an away professor is not in the available-now list",
+    !openWhileAway.body.results?.some((r) => r.id === 1),
+  );
+
+  const pastDate = await api("/api/faculty/1/status", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      manual_status: "unavailable",
+      expires_at: new Date(Date.now() - 86_400_000).toISOString(),
+    }),
+  });
+  check("an end date in the past is rejected (422)", pastDate.status === 422, `got ${pastDate.status}`);
+
+  const tooFar = await api("/api/faculty/1/status", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      manual_status: "unavailable",
+      expires_at: new Date(Date.now() + 500 * 86_400_000).toISOString(),
+    }),
+  });
+  check("an implausibly long override is rejected (422)", tooFar.status === 422);
+
+  await api("/api/faculty/1/status", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({ manual_status: null }),
+  });
 
   const badEmail = await api("/api/faculty/1", {
     method: "PATCH",
@@ -247,6 +357,13 @@ console.log("\nFaculty (jsantos@campus.edu.ph)");
   });
   check("faculty cannot create records (403)", create.status === 403);
 
+  const otherPhoto = await api("/api/faculty/2", {
+    method: "PATCH",
+    headers: auth,
+    body: JSON.stringify({ photo_url: "" }),
+  });
+  check("cannot change the photo on someone elses record (403)", otherPhoto.status === 403);
+
   const archive = await api("/api/faculty/2/archive", {
     method: "POST",
     headers: auth,
@@ -280,8 +397,7 @@ console.log("\nDepartment admin (admin@campus.edu.ph)");
       full_name: "Smoke Test Lecturer",
       title: "Instructor",
       department_id: 1,
-      building_id: 1,
-      room: "299",
+      room_id: 2,
     }),
   });
   check("admin can add a record (201)", created.status === 201, `got ${created.status}`);
@@ -310,9 +426,21 @@ console.log("\nDepartment admin (admin@campus.edu.ph)");
   const badFk = await api(`/api/faculty/${newId}`, {
     method: "PATCH",
     headers: auth,
-    body: JSON.stringify({ building_id: 9999 }),
+    body: JSON.stringify({ department_id: 9999 }),
   });
-  check("a nonexistent building is rejected (422)", badFk.status === 422, `got ${badFk.status}`);
+  check("a nonexistent department is rejected (422)", badFk.status === 422, `got ${badFk.status}`);
+
+  const adminAway = await api(`/api/faculty/${newId}/status`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      manual_status: "unavailable",
+      manual_note: "On leave.",
+      expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    }),
+  });
+  check("admin can post a month-long absence for any record", adminAway.status === 200);
+  check("it reads as Away to students", adminAway.body.availability?.label === "Away");
 
   const archived = await api(`/api/faculty/${newId}/archive`, {
     method: "POST",
@@ -345,10 +473,18 @@ console.log("\nDepartment admin (admin@campus.edu.ph)");
 console.log("\nReference data & hardening");
 {
   const departments = await api("/api/departments");
-  check("departments endpoint works", departments.body.departments?.length === 6);
+  check("departments endpoint lists the CCIS departments", departments.body.departments?.length === 3, `n=${departments.body.departments?.length}`);
+  check(
+    "every department belongs to CCIS",
+    departments.body.departments?.every((d) => d.college_code === "CCIS"),
+  );
 
   const buildings = await api("/api/buildings");
-  check("buildings endpoint works", buildings.body.buildings?.length === 5);
+  check("buildings endpoint returns the one building", buildings.body.buildings?.length === 1);
+
+  const rooms = await api("/api/rooms");
+  check("rooms endpoint lists every mapped room", rooms.body.rooms?.length === 12);
+  check("rooms endpoint reports the floors", JSON.stringify(rooms.body.floors) === "[1]");
 
   const login = await fetch(`${BASE}/api/auth/login`, {
     method: "POST",
@@ -379,7 +515,7 @@ console.log("\nReference data & hardening");
   check("nosniff header is set", headers.headers.get("x-content-type-options") === "nosniff");
 
   const pages = await Promise.all(
-    ["/", "/map", "/login", "/faculty/1", "/nope-does-not-exist"].map((p) =>
+    ["/", "/map", "/map?room=1", "/login", "/faculty/1", "/nope-does-not-exist"].map((p) =>
       fetch(`${BASE}${p}`).then((r) => [p, r.status]),
     ),
   );

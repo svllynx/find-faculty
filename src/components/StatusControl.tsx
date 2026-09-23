@@ -1,17 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Availability } from "@/lib/availability";
 
 /**
- * Where a faculty member posts their own availability.
+ * Where a faculty member posts their own availability, and sets an absence
+ * override when they will be away for a day, a week or a month.
  *
- * Two deliberate choices, both from the "information system, not tracking
+ * Three deliberate choices, all from the "information system, not tracking
  * system" rule:
  *   - nothing is posted unless this form is submitted;
- *   - a posted status carries an expiry, so a status forgotten on a Friday does
- *     not still be telling students something false on Monday.
+ *   - every override carries an end, so a status set before a conference is not
+ *     still telling students something false three weeks later;
+ *   - the form shows the exact sentence students will read before it is saved.
  */
 
 const CHOICES = [
@@ -19,7 +21,7 @@ const CHOICES = [
     value: "available" as const,
     icon: "🟢",
     label: "Available",
-    help: "I am in and free for consultation now.",
+    help: "I am in and free for consultation.",
   },
   {
     value: "office_hours" as const,
@@ -30,19 +32,63 @@ const CHOICES = [
   {
     value: "unavailable" as const,
     icon: "🔴",
-    label: "Unavailable",
-    help: "I am away. Do not make the trip.",
+    label: "Away / Unavailable",
+    help: "I am not in. Do not make the trip.",
   },
 ];
 
-const DURATIONS = [
-  { value: "60", label: "1 hour" },
-  { value: "120", label: "2 hours" },
-  { value: "240", label: "4 hours" },
-  { value: "480", label: "the rest of the day" },
-  { value: "1440", label: "24 hours" },
-  { value: "", label: "until I clear it" },
+type Preset = {
+  value: string;
+  label: string;
+  group: "now" | "away";
+  /** Given "now", when does the override lapse? null = until cleared. */
+  endsAt: (now: Date) => Date | null;
+};
+
+function endOfDay(date: Date): Date {
+  const end = new Date(date);
+  end.setHours(23, 59, 0, 0);
+  return end;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return endOfDay(next);
+}
+
+const PRESETS: Preset[] = [
+  { value: "1h", label: "1 hour", group: "now", endsAt: (n) => new Date(n.getTime() + 3_600_000) },
+  { value: "2h", label: "2 hours", group: "now", endsAt: (n) => new Date(n.getTime() + 7_200_000) },
+  { value: "4h", label: "4 hours", group: "now", endsAt: (n) => new Date(n.getTime() + 14_400_000) },
+  { value: "today", label: "The rest of today", group: "now", endsAt: (n) => endOfDay(n) },
+  { value: "1d", label: "1 day", group: "away", endsAt: (n) => addDays(n, 1) },
+  { value: "3d", label: "3 days", group: "away", endsAt: (n) => addDays(n, 3) },
+  { value: "1w", label: "1 week", group: "away", endsAt: (n) => addDays(n, 7) },
+  { value: "2w", label: "2 weeks", group: "away", endsAt: (n) => addDays(n, 14) },
+  {
+    value: "1mo",
+    label: "1 month",
+    group: "away",
+    endsAt: (n) => {
+      const end = new Date(n);
+      end.setMonth(end.getMonth() + 1);
+      return endOfDay(end);
+    },
+  },
+  { value: "date", label: "Until a date I pick…", group: "away", endsAt: () => null },
+  { value: "open", label: "Until I clear it", group: "away", endsAt: () => null },
 ];
+
+function formatEnd(date: Date | null, withTime: boolean): string {
+  if (!date) return "until you clear it";
+  return `until ${date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...(withTime ? { hour: "numeric", minute: "2-digit" } : {}),
+  })}`;
+}
 
 export default function StatusControl({
   facultyId,
@@ -58,12 +104,30 @@ export default function StatusControl({
     availability.selfReported ? availability.state : null,
   );
   const [note, setNote] = useState(initialNote);
-  const [duration, setDuration] = useState("240");
+  const [preset, setPreset] = useState("4h");
+  const [customDate, setCustomDate] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const selected = PRESETS.find((p) => p.value === preset) ?? PRESETS[2];
+
+  const endsAt = useMemo(() => {
+    if (preset === "open") return null;
+    if (preset === "date") return customDate ? endOfDay(new Date(`${customDate}T12:00`)) : null;
+    return selected.endsAt(new Date());
+  }, [preset, customDate, selected]);
+
+  const longAbsence = Boolean(endsAt && endsAt.getTime() - Date.now() > 24 * 3_600_000);
+  const previewLabel =
+    choice === "unavailable" ? (longAbsence ? "Away" : "Unavailable") : choice === "available" ? "Available" : "In office hours";
+
   async function post(status: string | null) {
+    if (status && preset === "date" && !customDate) {
+      setError("Pick the date you will be back.");
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -74,19 +138,20 @@ export default function StatusControl({
       body: JSON.stringify({
         manual_status: status,
         manual_note: status ? note.trim() : "",
-        expires_in_minutes: status && duration ? Number(duration) : null,
+        expires_at: status && endsAt ? endsAt.toISOString() : null,
+        expires_in_minutes: null,
       }),
     });
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      setError(payload.error ?? "Could not save your status.");
+      setError(payload.issues?.[0]?.message ?? payload.error ?? "Could not save your status.");
     } else {
       setChoice(status);
       setMessage(
         status
-          ? "Posted. Students will see this on your profile."
-          : "Cleared. Your badge now follows your published office hours.",
+          ? "Posted. Students see this on your profile now."
+          : "Cleared. Your badge follows your published office hours again.",
       );
       router.refresh();
     }
@@ -96,7 +161,7 @@ export default function StatusControl({
   return (
     <div>
       <fieldset disabled={busy}>
-        <legend className="label">What should students see right now?</legend>
+        <legend className="label">What should students see?</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           {CHOICES.map((option) => {
             const active = choice === option.value;
@@ -105,11 +170,9 @@ export default function StatusControl({
                 key={option.value}
                 type="button"
                 aria-pressed={active}
-                onClick={() => post(option.value)}
+                onClick={() => setChoice(option.value)}
                 className={`rounded-lg border p-3 text-left transition-colors ${
-                  active
-                    ? "border-brand bg-brand-soft"
-                    : "border-line bg-surface hover:bg-raise"
+                  active ? "border-brand bg-brand-soft" : "border-line bg-surface hover:bg-raise"
                 }`}
               >
                 <span className="flex items-center gap-2 text-sm font-semibold text-ink">
@@ -122,7 +185,7 @@ export default function StatusControl({
           })}
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_15rem]">
           <div>
             <label htmlFor="status-note" className="label">
               Note for students (optional)
@@ -133,29 +196,72 @@ export default function StatusControl({
               value={note}
               maxLength={200}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. In my office grading — drop by anytime."
+              placeholder="e.g. Attending a seminar — email me instead."
               className="field"
             />
           </div>
+
           <div>
             <label htmlFor="status-duration" className="label">
-              Keep this for
+              How long
             </label>
             <select
               id="status-duration"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              className="field sm:w-52"
+              value={preset}
+              onChange={(e) => setPreset(e.target.value)}
+              className="field"
             >
-              {DURATIONS.map((d) => (
-                <option key={d.label} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
+              <optgroup label="Just for now">
+                {PRESETS.filter((p) => p.group === "now").map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Away for longer">
+                {PRESETS.filter((p) => p.group === "away").map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
         </div>
+
+        {preset === "date" && (
+          <div className="mt-3 max-w-xs">
+            <label htmlFor="status-date" className="label">
+              Back on
+            </label>
+            <input
+              id="status-date"
+              type="date"
+              value={customDate}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setCustomDate(e.target.value)}
+              className="field"
+            />
+          </div>
+        )}
       </fieldset>
+
+      {/* The exact sentence a student will read, before it is saved. */}
+      <p className="mt-4 rounded-lg border border-line bg-canvas px-4 py-3 text-sm">
+        <span className="font-semibold text-ink">Students will see: </span>
+        {choice ? (
+          <>
+            <span className="font-semibold text-brand-ink">{previewLabel}</span>
+            {preset !== "open" && <> — {formatEnd(endsAt, !longAbsence)}</>}
+            {preset === "open" && <> — until you clear it</>}
+            {note.trim() && <> · {note.trim()}</>}
+          </>
+        ) : (
+          <span className="text-muted">
+            your published office hours, with nothing posted on top of them.
+          </span>
+        )}
+      </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
@@ -164,7 +270,7 @@ export default function StatusControl({
           disabled={busy || !choice}
           className="btn btn-primary"
         >
-          {busy ? "Saving…" : "Update note & duration"}
+          {busy ? "Saving…" : "Post this status"}
         </button>
         <button
           type="button"
@@ -181,7 +287,12 @@ export default function StatusControl({
         {message && !error && <span className="font-medium text-open">{message}</span>}
         {!error && !message && !availability.selfReported && (
           <span className="text-muted">
-            Nothing posted — students see your published office hours instead.
+            Nothing posted — students see your published office hours.
+          </span>
+        )}
+        {!error && !message && availability.selfReported && availability.until && (
+          <span className="text-muted">
+            Posted now, lapsing on its own {formatEnd(new Date(availability.until), !availability.longAbsence)}.
           </span>
         )}
       </p>

@@ -2,25 +2,7 @@ import Link from "next/link";
 import type { FacultyRecord } from "@/lib/faculty";
 import { WEEKDAYS, formatRange } from "@/lib/time";
 import StatusBadge from "./StatusBadge";
-
-/** Initials stand in for a photo, so the directory needs no uploads to look complete. */
-function Avatar({ name }: { name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-
-  return (
-    <span
-      aria-hidden="true"
-      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-soft text-sm font-bold text-brand-ink"
-    >
-      {initials}
-    </span>
-  );
-}
+import Avatar from "./Avatar";
 
 /**
  * One search result: who they are, where their office is, and the single most
@@ -43,7 +25,7 @@ export default function FacultyCard({ faculty }: { faculty: FacultyRecord }) {
     <li className="card p-4 transition-shadow hover:shadow-sm focus-within:shadow-sm">
       <article>
         <div className="flex items-start gap-3">
-          <Avatar name={faculty.full_name} />
+          <Avatar name={faculty.full_name} photo={faculty.photo_url} />
 
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-semibold leading-tight">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny, type output } from "zod";
 import { currentUser, type Role, type SessionUser } from "./auth";
+import type { FacultyRecord } from "./faculty";
 
 /** Shared plumbing for the /api routes: JSON shapes, guards, error mapping. */
 
@@ -63,14 +64,18 @@ export function parseId(value: string): number | null {
 
 /** Read search filters off a URL, ignoring anything malformed. */
 export function readFilters(url: URL) {
-  const weekdayRaw = url.searchParams.get("day");
-  const weekday = weekdayRaw === null ? undefined : Number(weekdayRaw);
+  const int = (name: string, min: number, max: number) => {
+    const raw = url.searchParams.get(name);
+    if (raw === null) return undefined;
+    const value = Number(raw);
+    return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
+  };
 
   return {
     q: url.searchParams.get("q") ?? undefined,
     department: url.searchParams.get("department") ?? undefined,
-    building: url.searchParams.get("building") ?? undefined,
-    weekday: Number.isInteger(weekday) && weekday! >= 0 && weekday! <= 6 ? weekday : undefined,
+    floor: int("floor", 0, 99),
+    weekday: int("day", 0, 6),
     openNow: url.searchParams.get("openNow") === "1",
   };
 }
@@ -79,41 +84,28 @@ export function readFilters(url: URL) {
  * What a student's browser is allowed to see about a faculty member.
  * Deliberately excludes the audit trail and anything about accounts.
  */
-export function publicFaculty(record: {
-  id: number;
-  full_name: string;
-  title: string;
-  department_name: string | null;
-  department_code: string | null;
-  building_name: string | null;
-  building_code: string | null;
-  building_landmark: string | null;
-  building_entrance: string | null;
-  room: string;
-  floor: string;
-  email: string;
-  phone: string;
-  subjectList: string[];
-  consultation_note: string;
-  officeLabel: string;
-  officeHours: unknown[];
-  availability: unknown;
-  updated_at: string;
-}) {
+export function publicFaculty(record: FacultyRecord) {
   return {
     id: record.id,
     name: record.full_name,
     title: record.title,
+    photo: record.photo_url || null,
+    college: record.college_name,
+    collegeCode: record.college_code,
     department: record.department_name,
     departmentCode: record.department_code,
     office: {
       building: record.building_name,
       buildingCode: record.building_code,
-      room: record.room,
-      floor: record.floor,
+      roomId: record.room_id,
+      room: record.room_number,
+      roomName: record.room_name,
+      floor: record.room_floor,
+      floorLabel: record.floorLabel,
       label: record.officeLabel,
       landmark: record.building_landmark,
       entrance: record.building_entrance,
+      note: record.room_note,
     },
     contact: { email: record.email, phone: record.phone },
     subjects: record.subjectList,

@@ -92,3 +92,36 @@ export function humanizeGap(minutesAway: number): string {
   const days = Math.round(minutesAway / (24 * 60));
   return days === 1 ? "tomorrow" : `in ${days} days`;
 }
+
+/** Parse the ISO / SQLite datetimes the database stores. Null when unusable. */
+export function parseStored(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value.includes("T") ? value : value.replace(" ", "T") + "Z");
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** "Fri, 3 Oct" — the campus-time date a student needs to remember. */
+export function formatDate(value: Date | string | null | undefined): string {
+  const date = value instanceof Date ? value : parseStored(value ?? null);
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: CAMPUS_TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
+
+/** "Fri, 3 Oct, 5:00 PM" — used when the exact hour matters. */
+export function formatDateTime(value: Date | string | null | undefined): string {
+  const date = value instanceof Date ? value : parseStored(value ?? null);
+  if (!date) return "";
+  return new Intl.DateTimeFormat("en-PH", {
+    timeZone: CAMPUS_TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}

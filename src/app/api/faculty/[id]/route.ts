@@ -51,7 +51,7 @@ export async function PATCH(request: Request, { params }: Params) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
     if (message.includes("FOREIGN KEY")) {
-      return fail(422, "That department or building does not exist.");
+      return fail(422, "That department or room does not exist.");
     }
     throw err;
   }

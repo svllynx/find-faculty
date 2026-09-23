@@ -2,21 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Building, Department, FacultyRecord } from "@/lib/faculty";
+import type { Department, FacultyRecord, RoomWithOccupants } from "@/lib/faculty";
 
 /**
- * Office location and contact details. The name field is admin-only, because a
- * rename affects how every student searches for this person.
+ * Office and contact details.
+ *
+ * The office is picked from the rooms that exist on the floor plan rather than
+ * typed, so the directory can never point at a room the map does not have. The
+ * name field is admin-only: a rename changes how every student searches for
+ * this person.
  */
 export default function ProfileForm({
   faculty,
   departments,
-  buildings,
+  rooms,
   canRename,
 }: {
   faculty: FacultyRecord;
   departments: Department[];
-  buildings: Building[];
+  rooms: RoomWithOccupants[];
   canRename: boolean;
 }) {
   const router = useRouter();
@@ -24,9 +28,7 @@ export default function ProfileForm({
     full_name: faculty.full_name,
     title: faculty.title,
     department_id: faculty.department_id ? String(faculty.department_id) : "",
-    building_id: faculty.building_id ? String(faculty.building_id) : "",
-    room: faculty.room,
-    floor: faculty.floor,
+    room_id: faculty.room_id ? String(faculty.room_id) : "",
     email: faculty.email,
     phone: faculty.phone,
     subjects: faculty.subjects,
@@ -36,8 +38,17 @@ export default function ProfileForm({
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-    setForm((current) => ({ ...current, [key]: e.target.value }));
+  const set =
+    (key: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setForm((current) => ({ ...current, [key]: e.target.value }));
+
+  const byFloor = new Map<number, RoomWithOccupants[]>();
+  for (const room of rooms) {
+    const list = byFloor.get(room.floor) ?? [];
+    list.push(room);
+    byFloor.set(room.floor, list);
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -47,14 +58,12 @@ export default function ProfileForm({
 
     const body: Record<string, unknown> = {
       title: form.title,
-      room: form.room,
-      floor: form.floor,
       email: form.email,
       phone: form.phone,
       subjects: form.subjects,
       consultation_note: form.consultation_note,
       department_id: form.department_id ? Number(form.department_id) : null,
-      building_id: form.building_id ? Number(form.building_id) : null,
+      room_id: form.room_id ? Number(form.room_id) : null,
     };
     if (canRename) body.full_name = form.full_name;
 
@@ -67,7 +76,7 @@ export default function ProfileForm({
 
     if (!response.ok) {
       const issue = payload.issues?.[0];
-      setError(issue ? `${issue.path}: ${issue.message}` : payload.error ?? "Could not save.");
+      setError(issue ? `${issue.path}: ${issue.message}` : (payload.error ?? "Could not save."));
     } else {
       setMessage("Saved. Students see the updated details immediately.");
       router.refresh();
@@ -116,49 +125,34 @@ export default function ProfileForm({
             <option value="">Not assigned</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name}
+                {d.name} ({d.code})
               </option>
             ))}
           </select>
         </div>
 
         <div>
-          <label htmlFor="building_id" className="label">
-            Building
+          <label htmlFor="room_id" className="label">
+            Office room
           </label>
-          <select
-            id="building_id"
-            value={form.building_id}
-            onChange={set("building_id")}
-            className="field"
-          >
+          <select id="room_id" value={form.room_id} onChange={set("room_id")} className="field">
             <option value="">Not assigned</option>
-            {buildings.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
-              </option>
-            ))}
+            {[...byFloor.keys()]
+              .sort((a, b) => a - b)
+              .map((floor) => (
+                <optgroup key={floor} label={`${floor === 1 ? "1st" : `${floor}th`} floor`}>
+                  {(byFloor.get(floor) ?? []).map((room) => (
+                    <option key={room.id} value={room.id}>
+                      Room {room.number}
+                      {room.name ? ` — ${room.name}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
           </select>
-        </div>
-
-        <div>
-          <label htmlFor="room" className="label">
-            Room
-          </label>
-          <input id="room" value={form.room} onChange={set("room")} className="field" placeholder="204" />
-        </div>
-
-        <div>
-          <label htmlFor="floor" className="label">
-            Floor
-          </label>
-          <input
-            id="floor"
-            value={form.floor}
-            onChange={set("floor")}
-            className="field"
-            placeholder="2nd floor"
-          />
+          <p className="mt-1 text-xs text-muted">
+            This is what the floor plan points students to.
+          </p>
         </div>
 
         <div>
