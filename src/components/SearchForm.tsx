@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { SHORT_WEEKDAYS } from "@/lib/time";
 import type { Department } from "@/lib/faculty";
 
@@ -34,7 +35,7 @@ export default function SearchForm({
             aria-hidden="true"
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
           >
-            🔍
+            <MagnifyingGlass weight="light" size={18} />
           </span>
           <input
             id="q"

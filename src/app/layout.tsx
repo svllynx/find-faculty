@@ -6,6 +6,7 @@ import "./globals.css";
 import { currentUser } from "@/lib/auth";
 import { usingEphemeralDb } from "@/lib/db";
 import SignOutButton from "@/components/SignOutButton";
+import ScrollReveal from "@/components/ScrollReveal";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -91,68 +92,73 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to content
         </a>
 
-        <header className="bg-brand">
-          {/* The mark is centred on its own row, so it reads as the site's name
-              rather than as the first item in a navigation list. */}
-          <div className="flex justify-center px-4 pb-3 pt-5">
-            <Masthead />
-          </div>
+        <header className="relative overflow-hidden bg-brand grain">
+          {/* Ambient mesh-glow + grain (the latter via .grain on <header>): purely decorative. */}
+          <div aria-hidden="true" className="mesh-glow" />
 
-          <p className="px-4 pb-4 text-center text-[13px] text-white/75">
-            Faculty Information &amp; Navigate Direction ·{" "}
-            <span className="font-semibold text-white">CCIS</span>
-          </p>
+          <div className="relative z-10">
+            {/* The mark is centred on its own row, so it reads as the site's name
+                rather than as the first item in a navigation list. */}
+            <div data-hero-reveal className="flex justify-center px-4 pb-3 pt-5">
+              <Masthead />
+            </div>
 
-          {/* Desktop / tablet: the nav row itself reads as a floating pill,
-              detached visually from the bar via its own rounded-full hairline. */}
-          <nav
-            aria-label="Main"
-            className="hidden items-center justify-center gap-1 border-t border-white/15 px-4 py-2 sm:flex"
-          >
-            <NavLinks user={user} linkClassName={navLink} />
-            {user ? (
-              <>
-                <span className="mx-1 hidden text-xs text-white/60 sm:inline">
-                  {user.display_name || user.email}
-                </span>
-                <SignOutButton />
-              </>
-            ) : (
-              <Link
-                href="/login"
-                className="ml-1 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-px hover:bg-white/25"
-              >
-                Faculty sign in
-              </Link>
-            )}
-          </nav>
+            <p data-hero-reveal className="px-4 pb-4 text-center text-[13px] text-white/75">
+              Faculty Information &amp; Navigate Direction ·{" "}
+              <span className="font-semibold text-white">CCIS</span>
+            </p>
 
-          {/* Mobile: a native <details> disclosure, so the menu opens and the
-              hamburger morphs into an "X" with zero JavaScript. */}
-          <details className="nav-toggle relative border-t border-white/15 sm:hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white/90 [&::-webkit-details-marker]:hidden">
-              <span aria-hidden="true" className="relative flex h-4 w-5 flex-col justify-between">
-                <span className="nav-line h-[1.5px] w-full origin-center rounded-full bg-white transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))]" />
-                <span className="nav-line h-[1.5px] w-full origin-center rounded-full bg-white transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))]" />
-              </span>
-              Menu
-            </summary>
-          </details>
-          <div className="nav-sheet overflow-hidden px-4 sm:hidden">
-            <div className="flex flex-col gap-1 rounded-2xl bg-white p-2 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
-              <NavLinks user={user} linkClassName={sheetLink} />
+            {/* Desktop / tablet: the nav row itself reads as a floating pill,
+                detached visually from the bar via its own rounded-full hairline. */}
+            <nav
+              aria-label="Main"
+              className="hidden items-center justify-center gap-1 border-t border-white/15 px-4 py-2 sm:flex"
+            >
+              <NavLinks user={user} linkClassName={navLink} />
               {user ? (
-                <div className="flex items-center justify-between gap-2 border-t border-line px-3.5 py-2.5">
-                  <span className="truncate text-xs text-muted">
+                <>
+                  <span className="mx-1 hidden text-xs text-white/60 sm:inline">
                     {user.display_name || user.email}
                   </span>
                   <SignOutButton />
-                </div>
+                </>
               ) : (
-                <Link href="/login" className="rounded-xl bg-brand px-3.5 py-2.5 text-sm font-semibold text-white">
+                <Link
+                  href="/login"
+                  className="ml-1 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-px hover:bg-white/25"
+                >
                   Faculty sign in
                 </Link>
               )}
+            </nav>
+
+            {/* Mobile: a native <details> disclosure, so the menu opens and the
+                hamburger morphs into an "X" with zero JavaScript. */}
+            <details className="nav-toggle relative border-t border-white/15 sm:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white/90 [&::-webkit-details-marker]:hidden">
+                <span aria-hidden="true" className="relative flex h-4 w-5 flex-col justify-between">
+                  <span className="nav-line h-[1.5px] w-full origin-center rounded-full bg-white transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))]" />
+                  <span className="nav-line h-[1.5px] w-full origin-center rounded-full bg-white transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))]" />
+                </span>
+                Menu
+              </summary>
+            </details>
+            <div className="nav-sheet overflow-hidden px-4 sm:hidden">
+              <div className="flex flex-col gap-1 rounded-2xl bg-white p-2 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+                <NavLinks user={user} linkClassName={sheetLink} />
+                {user ? (
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-3.5 py-2.5">
+                    <span className="truncate text-xs text-muted">
+                      {user.display_name || user.email}
+                    </span>
+                    <SignOutButton />
+                  </div>
+                ) : (
+                  <Link href="/login" className="rounded-xl bg-brand px-3.5 py-2.5 text-sm font-semibold text-white">
+                    Faculty sign in
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -183,6 +189,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </p>
           </div>
         </footer>
+
+        <ScrollReveal />
       </body>
     </html>
   );

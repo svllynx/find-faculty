@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { MapPin, DoorOpen } from "@phosphor-icons/react/dist/ssr";
 import { getDb } from "@/lib/db";
 import {
   facultyInRoom,
@@ -56,21 +57,17 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
 
       {building && (
         <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <dt className="sr-only">Landmark</dt>
-            <dd className="text-ink-soft">
-              <span aria-hidden="true" className="mr-1.5 text-muted">
-                📍
-              </span>
+            <dd className="flex items-center gap-1.5 text-ink-soft">
+              <MapPin aria-hidden="true" weight="light" className="shrink-0 text-muted" size={16} />
               {building.landmark}
             </dd>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <dt className="sr-only">Entrance</dt>
-            <dd className="text-muted">
-              <span aria-hidden="true" className="mr-1.5">
-                🚪
-              </span>
+            <dd className="flex items-center gap-1.5 text-muted">
+              <DoorOpen aria-hidden="true" weight="light" className="shrink-0" size={16} />
               {building.entrance}
             </dd>
           </div>
@@ -158,9 +155,9 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
         <h2 id="rooms-heading" className="text-lg font-semibold">
           Rooms on this floor
         </h2>
-        <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+        <ul data-reveal-group className="mt-4 grid gap-3 sm:grid-cols-2">
           {rooms.map((room) => (
-            <li key={room.id} className="card p-4">
+            <li key={room.id} data-reveal className="card hover-lift p-4">
               <h3 className="flex items-baseline gap-2 text-base font-semibold">
                 <Link
                   href={`/map?floor=${floor}&room=${room.number}`}

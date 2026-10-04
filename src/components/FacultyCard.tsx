@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MapPin, Clock, BookOpen } from "@phosphor-icons/react/dist/ssr";
 import type { FacultyRecord } from "@/lib/faculty";
 import { WEEKDAYS, formatRange } from "@/lib/time";
 import StatusBadge from "./StatusBadge";
@@ -8,7 +9,15 @@ import Avatar from "./Avatar";
  * One search result: who they are, where their office is, and the single most
  * useful time fact — either the block running now, or the next one.
  */
-export default function FacultyCard({ faculty }: { faculty: FacultyRecord }) {
+export default function FacultyCard({
+  faculty,
+  reveal = false,
+}: {
+  faculty: FacultyRecord;
+  /** Opt into the GSAP scroll-reveal (see ScrollReveal); off by default so
+      single-card contexts, like the room directory on /map, stay static. */
+  reveal?: boolean;
+}) {
   const { availability } = faculty;
   const next = availability.nextWindow;
 
@@ -22,7 +31,7 @@ export default function FacultyCard({ faculty }: { faculty: FacultyRecord }) {
       : "No office hours published";
 
   return (
-    <li className="card p-4 transition-shadow hover:shadow-sm focus-within:shadow-sm">
+    <li {...(reveal ? { "data-reveal": true } : {})} className="card hover-lift p-4">
       <article>
         <div className="flex items-start gap-3">
           <Avatar name={faculty.full_name} photo={faculty.photo_url} />
@@ -46,27 +55,23 @@ export default function FacultyCard({ faculty }: { faculty: FacultyRecord }) {
         <dl className="mt-3 space-y-1.5 text-sm">
           <div className="flex gap-2">
             <dt className="sr-only">Office</dt>
-            <dd className="flex gap-2 text-ink-soft">
-              <span aria-hidden="true" className="text-muted">
-                📍
-              </span>
+            <dd className="flex items-center gap-2 text-ink-soft">
+              <MapPin aria-hidden="true" weight="light" className="shrink-0 text-muted" size={16} />
               <span>{faculty.officeLabel}</span>
             </dd>
           </div>
           <div className="flex gap-2">
             <dt className="sr-only">Office hours</dt>
-            <dd className="flex gap-2 text-ink-soft">
-              <span aria-hidden="true" className="text-muted">
-                🕐
-              </span>
+            <dd className="flex items-center gap-2 text-ink-soft">
+              <Clock aria-hidden="true" weight="light" className="shrink-0 text-muted" size={16} />
               <span>{timeLine}</span>
             </dd>
           </div>
           {faculty.subjectList.length > 0 && (
             <div className="flex gap-2">
               <dt className="sr-only">Subjects</dt>
-              <dd className="flex gap-2 text-muted">
-                <span aria-hidden="true">📘</span>
+              <dd className="flex items-center gap-2 text-muted">
+                <BookOpen aria-hidden="true" weight="light" className="shrink-0" size={16} />
                 <span className="truncate">{faculty.subjectList.join(" · ")}</span>
               </dd>
             </div>

@@ -5,6 +5,12 @@ import { campusNow, WEEKDAYS, formatMinute } from "@/lib/time";
 import { isOpenNow } from "@/lib/availability";
 import SearchForm from "@/components/SearchForm";
 import FacultyCard from "@/components/FacultyCard";
+import {
+  CheckCircle,
+  Timer,
+  XCircle,
+  CalendarX,
+} from "@phosphor-icons/react/dist/ssr";
 
 export const dynamic = "force-dynamic";
 
@@ -49,17 +55,29 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const openCount = openNowCount(db, now);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
-      <section className="mb-10 max-w-2xl">
-        <span className="eyebrow">CCIS faculty directory</span>
-        <h1 className="mt-4 text-4xl tracking-tight sm:text-5xl">
+    <div className="relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+      {/* A soft spotlight behind the hero, echoing the masthead's glow without
+          competing with it — purely decorative. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -top-10 left-1/2 -z-10 h-[28rem] w-[56rem] -translate-x-1/2 rounded-full bg-brand-soft/60 blur-3xl"
+      />
+
+      <section className="mb-10 max-w-4xl">
+        <span data-hero-reveal className="eyebrow">
+          CCIS faculty directory
+        </span>
+        <h1
+          data-hero-reveal
+          className="mt-5 text-[clamp(2.5rem,6vw,4.25rem)] leading-[1.05] tracking-tight"
+        >
           Where and when can I find my professor?
         </h1>
-        <p className="mt-4 text-[15px] leading-relaxed text-ink-soft sm:text-base">
+        <p data-hero-reveal className="mt-5 max-w-2xl text-base leading-relaxed text-ink-soft sm:text-lg">
           Search once and get the office, the office hours and directions to the door together —
           instead of asking classmates or checking the CCIS bulletin board.
         </p>
-        <p className="mt-3 text-sm text-muted">
+        <p data-hero-reveal className="mt-4 text-sm text-muted">
           {WEEKDAYS[clock.weekday]}, {formatMinute(clock.minute)} on campus ·{" "}
           <Link href="/?openNow=1" className="font-semibold text-brand hover:text-brand-ink">
             {openCount} faculty available right now
@@ -67,7 +85,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </p>
       </section>
 
-      <section className="bezel-shell mb-10">
+      <section data-hero-reveal className="bezel-shell mb-10">
         <div className="bezel-core p-4 sm:p-5">
           <SearchForm
             departments={departments}
@@ -110,44 +128,44 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             </Link>
           </div>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul data-reveal-group className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((faculty) => (
-              <FacultyCard key={faculty.id} faculty={faculty} />
+              <FacultyCard key={faculty.id} faculty={faculty} reveal />
             ))}
           </ul>
         )}
       </section>
 
-      <section className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section data-reveal-group className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
-            icon: "🟢",
+            icon: CheckCircle,
+            tone: "text-open",
             title: "Available",
             body: "The faculty member posted that they are in and free for consultation right now.",
           },
           {
-            icon: "🟡",
+            icon: Timer,
+            tone: "text-soon",
             title: "In office hours",
             body: "Their published schedule has a block running now. Expected in office — worth the walk.",
           },
           {
-            icon: "🔴",
+            icon: XCircle,
+            tone: "text-shut",
             title: "Unavailable",
             body: "They posted that they are out, so you know not to make the trip.",
           },
           {
-            icon: "🗓️",
+            icon: CalendarX,
+            tone: "text-muted",
             title: "Away until a date",
             body: "A longer absence — a seminar, leave, an accreditation visit — with the date they are back.",
           },
-        ].map((item, index) => (
-          <article
-            key={item.title}
-            className="card reveal p-4"
-            style={{ animationDelay: `${index * 80}ms` }}
-          >
-            <span aria-hidden="true" className="btn-icon h-9 w-9 text-base">
-              {item.icon}
+        ].map((item) => (
+          <article key={item.title} data-reveal className="card hover-lift p-4">
+            <span aria-hidden="true" className={`btn-icon h-10 w-10 ${item.tone}`}>
+              <item.icon size={20} weight="light" />
             </span>
             <h3 className="mt-3 text-sm font-semibold">{item.title}</h3>
             <p className="mt-1.5 text-sm text-muted">{item.body}</p>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { CalendarX } from "@phosphor-icons/react/dist/ssr";
 import { getDb } from "@/lib/db";
 import { getFaculty, listRooms } from "@/lib/faculty";
 import { campusNow, humanizeGap, formatRange, formatDate, WEEKDAYS } from "@/lib/time";
@@ -55,7 +56,7 @@ export default async function FacultyProfilePage({ params }: Params) {
       </nav>
 
       {/* ── Identity + status ─────────────────────────────────────────────── */}
-      <header className="card p-5 sm:p-6">
+      <header data-hero-reveal className="card p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-4">
             <Avatar name={faculty.full_name} photo={faculty.photo_url} size="lg" />
@@ -88,7 +89,7 @@ export default async function FacultyProfilePage({ params }: Params) {
             difference between "come back later" and "come back next month". */}
         {availability.longAbsence && availability.until && (
           <p className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-shut/25 bg-shut-soft px-4 py-3 text-sm text-shut">
-            <span aria-hidden="true">🗓️</span>
+            <CalendarX aria-hidden="true" weight="light" className="shrink-0" size={18} />
             <span>
               <strong className="font-semibold">Away until {formatDate(availability.until)}.</strong>{" "}
               Office hours below resume after that date.
@@ -118,10 +119,10 @@ export default async function FacultyProfilePage({ params }: Params) {
         )}
       </header>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+      <div data-reveal-group className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
         {/* ── Office + hours ─────────────────────────────────────────────── */}
         <div className="space-y-6">
-          <section className="card p-5 sm:p-6" aria-labelledby="office-heading">
+          <section data-reveal className="card p-5 sm:p-6" aria-labelledby="office-heading">
             <h2 id="office-heading" className="text-lg font-semibold">
               Office
             </h2>
@@ -153,7 +154,7 @@ export default async function FacultyProfilePage({ params }: Params) {
             </dl>
           </section>
 
-          <section className="card p-5 sm:p-6" aria-labelledby="hours-heading">
+          <section data-reveal className="card p-5 sm:p-6" aria-labelledby="hours-heading">
             <div className="flex items-baseline justify-between gap-3">
               <h2 id="hours-heading" className="text-lg font-semibold">
                 Office hours
@@ -189,7 +190,7 @@ export default async function FacultyProfilePage({ params }: Params) {
 
         {/* ── Directions ─────────────────────────────────────────────────── */}
         <div className="space-y-6">
-          <section className="card p-5 sm:p-6" aria-labelledby="directions-heading">
+          <section data-reveal className="card p-5 sm:p-6" aria-labelledby="directions-heading">
             <h2 id="directions-heading" className="text-lg font-semibold">
               How to get there
             </h2>
@@ -200,15 +201,17 @@ export default async function FacultyProfilePage({ params }: Params) {
           </section>
 
           {faculty.room_id && (
-            <FloorMap
-              rooms={rooms}
-              floor={floor}
-              buildingName={faculty.building_name ?? "CCIS Building"}
-              highlightRoomId={faculty.room_id}
-            />
+            <div data-reveal>
+              <FloorMap
+                rooms={rooms}
+                floor={floor}
+                buildingName={faculty.building_name ?? "CCIS Building"}
+                highlightRoomId={faculty.room_id}
+              />
+            </div>
           )}
 
-          <aside className="card bg-brand-soft/50 p-5 text-sm text-ink-soft">
+          <aside data-reveal className="card bg-brand-soft/50 p-5 text-sm text-ink-soft">
             <h2 className="text-sm font-semibold text-brand-ink">Before you walk over</h2>
             <p className="mt-2">
               FIND shows what {firstName(faculty.full_name)} published — it does not detect whether

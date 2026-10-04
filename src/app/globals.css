@@ -34,6 +34,11 @@
   --color-shut: #a32f31;
   --color-shut-soft: #fbe9e9;
 
+  /* Ambient mesh-glow accents, used only in the hero/masthead backdrop. */
+  --color-glow-a: #3d5bc9;
+  --color-glow-b: #7c5cff;
+  --color-glow-c: #1a2a5c;
+
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
 
@@ -41,6 +46,7 @@
   --radius-shell: 1.75rem;
   --radius-core: 1.25rem;
   --ease-premium: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
@@ -254,28 +260,62 @@
   a:hover > .btn-icon {
     transform: translate(2px, -1px) scale(1.05);
   }
-}
 
-/*
- * Scroll-entry reveal for decorative sections only (never for the search form
- * or anything load-bearing) — pure CSS via scroll-driven animations, so it is
- * additive: unsupported browsers (and JS-disabled clients, since there is no
- * JS involved at all) simply render the final, fully visible state.
- */
-@supports (animation-timeline: view()) {
-  .reveal {
-    opacity: 0;
-    transform: translateY(28px);
-    animation: reveal-in linear both;
-    animation-timeline: view();
-    animation-range: entry 0% cover 25%;
+  /* Hover physics for cards and tiles: a GPU-safe lift, never on properties
+     that trigger layout. Entrance motion itself is handled by GSAP
+     (see ScrollReveal) — [data-reveal] elements start fully visible in the
+     static HTML, so JS-disabled and pre-hydration visitors never lose content. */
+  .hover-lift {
+    transition:
+      transform 450ms var(--ease-spring),
+      box-shadow 450ms var(--ease-spring);
   }
-}
 
-@keyframes reveal-in {
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  .hover-lift:hover {
+    transform: translateY(-6px);
+  }
+
+  /* The ambient mesh-glow behind the masthead: a few soft, blurred radial
+     blobs. Decorative only — aria-hidden, pointer-events-none at the call site. */
+  .mesh-glow {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .mesh-glow::before,
+  .mesh-glow::after {
+    content: "";
+    position: absolute;
+    width: 36rem;
+    height: 36rem;
+    border-radius: 9999px;
+    filter: blur(90px);
+    opacity: 0.55;
+  }
+
+  .mesh-glow::before {
+    top: -14rem;
+    left: -8rem;
+    background: radial-gradient(circle, var(--color-glow-b), transparent 70%);
+  }
+
+  .mesh-glow::after {
+    top: -18rem;
+    right: -10rem;
+    background: radial-gradient(circle, var(--color-glow-a), transparent 70%);
+  }
+
+  /* A faint grain layer so flat-colour areas (the masthead especially) read
+     as a material surface rather than a plain CSS fill. */
+  .grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 }
 
