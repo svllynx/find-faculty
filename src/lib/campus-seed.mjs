@@ -66,22 +66,22 @@ const FACULTY = [
   ["Juan Santos", "Associate Professor", "CS", "1", "jsantos@campus.edu.ph", "local 214",
     "Data Structures, Design and Analysis of Algorithms, CS Thesis 1",
     "Walk-ins welcome during office hours. For thesis consultations, please bring your latest draft.",
-    [[MON, hm(13), hm(15)], [WED, hm(13), hm(15)], [FRI, hm(9), hm(11)]]],
+    [[MON, hm(13), hm(15)], [WED, hm(13), hm(15)], [FRI, hm(9), hm(11), "", "consultation"]]],
 
   ["Maria Clara Reyes", "Professor", "CS", "1", "mcreyes@campus.edu.ph", "local 216",
     "Automata Theory and Formal Languages, Compiler Design",
     "Email me a short agenda first so we can use the time well.",
-    [[TUE, hm(10), hm(12)], [THU, hm(10), hm(12)]]],
+    [[TUE, hm(10), hm(12), "", "class"], [THU, hm(10), hm(12)]]],
 
   ["Melchora Aquino", "Professor", "CS", "5", "maquino@campus.edu.ph", "local 508",
     "Discrete Mathematics, Numerical Methods",
     "Bring your problem set so we can work through the actual sticking point.",
-    [[MON, hm(14), hm(16)], [TUE, hm(8), hm(10)], [THU, hm(8), hm(10)]]],
+    [[MON, hm(14), hm(16), "", "class"], [TUE, hm(8), hm(10)], [THU, hm(8), hm(10)]]],
 
   ["Antonio Luna", "Associate Professor", "CS", "5", "aluna@campus.edu.ph", "local 512",
     "Artificial Intelligence, Machine Learning, Data Science",
     "",
-    [[MON, hm(11), hm(12)], [WED, hm(11), hm(12)], [FRI, hm(11), hm(12)]]],
+    [[MON, hm(11), hm(12), "", "consultation"], [WED, hm(11), hm(12), "", "consultation"], [FRI, hm(11), hm(12)]]],
 
   ["Liwayway Dimaculangan", "Department Chair", "CS", "8", "ldimaculangan@campus.edu.ph", "local 210",
     "CS Capstone Project, Research Methods in Computing",
@@ -235,8 +235,8 @@ export function seedCampus(db) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     const insertHour = db.prepare(
-      `INSERT INTO office_hours (faculty_id, weekday, start_minute, end_minute, location_note)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO office_hours (faculty_id, weekday, start_minute, end_minute, type, location_note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     for (const row of FACULTY) {
       const [name, title, dept, room, email, phone, subjects, note, hours] = row;
@@ -246,8 +246,8 @@ export function seedCampus(db) {
           .lastInsertRowid,
       );
       facultyId[name] = id;
-      for (const [weekday, start, end, locationNote] of hours) {
-        insertHour.run(id, weekday, start, end, locationNote ?? "");
+      for (const [weekday, start, end, locationNote, type] of hours) {
+        insertHour.run(id, weekday, start, end, type ?? "office", locationNote ?? "");
       }
     }
   }

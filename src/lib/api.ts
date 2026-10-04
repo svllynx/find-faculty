@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny, type output } from "zod";
 import { currentUser, type Role, type SessionUser } from "./auth";
 import type { FacultyRecord } from "./faculty";
+import { parseScheduleType } from "./availability";
 
 /** Shared plumbing for the /api routes: JSON shapes, guards, error mapping. */
 
@@ -71,11 +72,14 @@ export function readFilters(url: URL) {
     return Number.isInteger(value) && value >= min && value <= max ? value : undefined;
   };
 
+  const scheduleType = parseScheduleType(url.searchParams.get("type"));
+
   return {
     q: url.searchParams.get("q") ?? undefined,
     department: url.searchParams.get("department") ?? undefined,
     floor: int("floor", 0, 99),
     weekday: int("day", 0, 6),
+    scheduleType,
     openNow: url.searchParams.get("openNow") === "1",
   };
 }

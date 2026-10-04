@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { CalendarX } from "@phosphor-icons/react/dist/ssr";
 import { getDb } from "@/lib/db";
 import { getFaculty, listRooms } from "@/lib/faculty";
+import { SCHEDULE_TYPE_LABEL } from "@/lib/availability";
+import { upcomingDatesFor } from "@/lib/appointments";
 import { campusNow, humanizeGap, formatRange, formatDate, WEEKDAYS } from "@/lib/time";
 import { currentUser, canEditFaculty } from "@/lib/auth";
 import StatusBadge, { SourceNote } from "@/components/StatusBadge";
@@ -11,6 +13,7 @@ import HoursTable from "@/components/HoursTable";
 import DirectionsPanel from "@/components/DirectionsPanel";
 import FloorMap from "@/components/FloorMap";
 import Avatar from "@/components/Avatar";
+import AppointmentRequestForm from "@/components/AppointmentRequestForm";
 
 export const dynamic = "force-dynamic";
 
@@ -43,10 +46,17 @@ export default async function FacultyProfilePage({ params }: Params) {
   const floor = faculty.room_floor ?? 1;
   const rooms = listRooms(db, floor);
 
+  const upcomingDates = Object.fromEntries(
+    [...new Set(faculty.officeHours.map((h) => h.weekday))].map((weekday) => [
+      weekday,
+      upcomingDatesFor(weekday, 1, now)[0],
+    ]),
+  );
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
       <nav aria-label="Breadcrumb" className="mb-5 text-sm">
-        <Link href="/" className="text-muted hover:text-brand">
+        <Link href="/search" className="text-muted hover:text-brand">
           Faculty search
         </Link>
         <span aria-hidden="true" className="mx-2 text-line">
@@ -119,9 +129,13 @@ export default async function FacultyProfilePage({ params }: Params) {
         )}
       </header>
 
-      <div data-reveal-group className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+      {/* grid-cols-1 + min-w-0 on each column: a CSS grid item defaults to
+          min-width:auto just like a flex item, so without this an unbroken
+          long string anywhere inside either column can force that column —
+          and the whole grid — wider than the viewport. */}
+      <div data-reveal-group className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_1fr]">
         {/* ── Office + hours ─────────────────────────────────────────────── */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <section data-reveal className="card p-5 sm:p-6" aria-labelledby="office-heading">
             <h2 id="office-heading" className="text-lg font-semibold">
               Office
@@ -157,7 +171,7 @@ export default async function FacultyProfilePage({ params }: Params) {
           <section data-reveal className="card p-5 sm:p-6" aria-labelledby="hours-heading">
             <div className="flex items-baseline justify-between gap-3">
               <h2 id="hours-heading" className="text-lg font-semibold">
-                Office hours
+                Weekly schedule
               </h2>
               {next && (
                 <p className="text-sm text-muted">
@@ -174,7 +188,7 @@ export default async function FacultyProfilePage({ params }: Params) {
             </div>
             {availability.currentWindow && (
               <p className="mt-4 rounded-lg bg-soon-soft px-4 py-2.5 text-sm font-medium text-soon">
-                Office hours are running now:{" "}
+                {SCHEDULE_TYPE_LABEL[availability.currentWindow.type ?? "office"]} running now:{" "}
                 {formatRange(
                   availability.currentWindow.start_minute,
                   availability.currentWindow.end_minute,
@@ -186,10 +200,28 @@ export default async function FacultyProfilePage({ params }: Params) {
               Last updated {formatUpdated(faculty.updated_at)}.
             </p>
           </section>
+
+          <section data-reveal className="card p-5 sm:p-6" aria-labelledby="appointment-heading">
+            <h2 id="appointment-heading" className="text-lg font-semibold">
+              Request an appointment
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Pick one of {firstName(faculty.full_name)}&rsquo;s published blocks. They approve or
+              decline it from their dashboard — nothing is booked until they do.
+            </p>
+            <div className="mt-4">
+              <AppointmentRequestForm
+                facultyId={faculty.id}
+                firstName={firstName(faculty.full_name)}
+                officeHours={faculty.officeHours}
+                upcomingDates={upcomingDates}
+              />
+            </div>
+          </section>
         </div>
 
         {/* ── Directions ─────────────────────────────────────────────────── */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <section data-reveal className="card p-5 sm:p-6" aria-labelledby="directions-heading">
             <h2 id="directions-heading" className="text-lg font-semibold">
               How to get there
@@ -229,7 +261,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <div className="flex gap-4 py-2.5">
       <dt className="w-28 shrink-0 text-muted">{label}</dt>
-      <dd className="text-ink">{children}</dd>
+      {/* min-w-0 is load-bearing: without it a flex item refuses to shrink below
+          its content's natural width, so one long unbroken token (an email, a
+          long subject list) pushes this row — and everything above it — wider
+          than the viewport instead of wrapping. */}
+      <dd className="min-w-0 flex-1 break-words text-ink">{children}</dd>
     </div>
   );
 }

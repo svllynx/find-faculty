@@ -1,6 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
 import { rows, row } from "./db";
-import { resolveAvailability, isOpenNow, type Availability, type OfficeHour } from "./availability";
+import {
+  resolveAvailability,
+  isOpenNow,
+  type Availability,
+  type OfficeHour,
+  type ScheduleType,
+} from "./availability";
 
 /**
  * Read/query layer. Every query is parameterized — search text is never
@@ -96,6 +102,7 @@ export type SearchFilters = {
   department?: string; // department code (CS / IT / IS)
   floor?: number; // only faculty whose office is on this floor
   weekday?: number; // only faculty with hours on this weekday
+  scheduleType?: ScheduleType; // only faculty with a block of this kind
   openNow?: boolean; // only faculty a student could visit right now
   includeInactive?: boolean;
 };
@@ -136,7 +143,7 @@ function hydrate(db: DatabaseSync, record: FacultyRow, at: Date): FacultyRecord 
   const officeHours = rows<OfficeHour>(
     db
       .prepare(
-        `SELECT weekday, start_minute, end_minute, location_note
+        `SELECT weekday, start_minute, end_minute, type, location_note
            FROM office_hours WHERE faculty_id = ?
           ORDER BY weekday, start_minute`,
       )
@@ -291,6 +298,10 @@ export function searchFaculty(
   if (typeof filters.weekday === "number") {
     where.push("EXISTS (SELECT 1 FROM office_hours oh WHERE oh.faculty_id = f.id AND oh.weekday = ?)");
     params.push(filters.weekday);
+  }
+  if (filters.scheduleType) {
+    where.push("EXISTS (SELECT 1 FROM office_hours oh WHERE oh.faculty_id = f.id AND oh.type = ?)");
+    params.push(filters.scheduleType);
   }
 
   const sql = `${SELECT_FACULTY}

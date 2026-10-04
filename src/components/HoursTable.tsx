@@ -1,9 +1,28 @@
-import type { OfficeHour } from "@/lib/availability";
+import type { OfficeHour, ScheduleType } from "@/lib/availability";
+import { SCHEDULE_TYPE_LABEL } from "@/lib/availability";
 import { WEEKDAYS, formatRange } from "@/lib/time";
 
+const TYPE_TONE: Record<ScheduleType, string> = {
+  office: "bg-brand-soft text-brand-ink",
+  consultation: "bg-accent-soft text-accent",
+  class: "bg-raise text-ink-soft",
+};
+
+function TypeTag({ type }: { type: ScheduleType }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${TYPE_TONE[type]}`}
+    >
+      {SCHEDULE_TYPE_LABEL[type]}
+    </span>
+  );
+}
+
 /**
- * The weekly office-hours table. Days with nothing scheduled are omitted rather
- * than shown as empty rows, so a short schedule reads as short.
+ * The weekly schedule table — office hours, consultation hours and class
+ * hours together, each block tagged with which kind it is. Days with nothing
+ * scheduled are omitted rather than shown as empty rows, so a short schedule
+ * reads as short.
  */
 export default function HoursTable({
   hours,
@@ -72,16 +91,19 @@ export default function HoursTable({
                 <ul className="space-y-1.5">
                   {blocks.map((h) => (
                     <li key={`${h.start_minute}-${h.end_minute}`}>
-                      <span
-                        className={`font-medium tabular-nums ${
-                          isNow(h) ? "text-soon" : "text-ink-soft"
-                        }`}
-                      >
-                        {formatRange(h.start_minute, h.end_minute)}
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`font-medium tabular-nums ${
+                            isNow(h) ? "text-soon" : "text-ink-soft"
+                          }`}
+                        >
+                          {formatRange(h.start_minute, h.end_minute)}
+                        </span>
+                        <TypeTag type={h.type ?? "office"} />
+                        {isNow(h) && (
+                          <span className="text-xs font-semibold text-soon">happening now</span>
+                        )}
                       </span>
-                      {isNow(h) && (
-                        <span className="ml-2 text-xs font-semibold text-soon">happening now</span>
-                      )}
                       {h.location_note ? (
                         <span className="block text-xs text-muted">{h.location_note}</span>
                       ) : null}

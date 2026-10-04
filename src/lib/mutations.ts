@@ -5,11 +5,14 @@ import { auditLog, type SessionUser } from "./auth";
 
 /** Validation lives next to the writes so every entry point shares one contract. */
 
+export const scheduleTypeSchema = z.enum(["office", "consultation", "class"]);
+
 export const officeHourSchema = z
   .object({
     weekday: z.number().int().min(0).max(6),
     start_minute: z.number().int().min(0).max(1439),
     end_minute: z.number().int().min(1).max(1440),
+    type: scheduleTypeSchema.default("office"),
     location_note: z.string().max(120).default(""),
   })
   .refine((h) => h.end_minute > h.start_minute, {
@@ -164,11 +167,18 @@ export function replaceOfficeHours(
   transaction(db, () => {
     db.prepare("DELETE FROM office_hours WHERE faculty_id = ?").run(facultyId);
     const insert = db.prepare(
-      `INSERT INTO office_hours (faculty_id, weekday, start_minute, end_minute, location_note)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO office_hours (faculty_id, weekday, start_minute, end_minute, type, location_note)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     );
     for (const h of hours) {
-      insert.run(facultyId, h.weekday, h.start_minute, h.end_minute, h.location_note ?? "");
+      insert.run(
+        facultyId,
+        h.weekday,
+        h.start_minute,
+        h.end_minute,
+        h.type ?? "office",
+        h.location_note ?? "",
+      );
     }
     db.prepare("UPDATE faculty SET updated_at = datetime('now') WHERE id = ?").run(facultyId);
     auditLog(db, actor, "hours.replace", facultyId, `${hours.length} block(s)`);
@@ -241,6 +251,84 @@ export function createFaculty(
     const id = Number(result.lastInsertRowid);
     auditLog(db, actor, "faculty.create", id, input.full_name);
     return id;
+  });
+}
+
+/**
+ * A student's appointment request against one published block. Anonymous by
+ * design — students never sign in — so the request carries a name and email
+ * rather than a user id. The requested slot is copied in whole (date, weekday,
+ * times, type) rather than just referencing the office_hours row, so the
+ * request still reads correctly even if that block is later edited or removed.
+ */
+export const createAppointmentSchema = z.object({
+  office_hour_id: z.number().int().positive().nullable().default(null),
+  student_name: z.string().trim().min(2).max(120),
+  student_email: z.string().trim().email(),
+  reason: z.string().trim().max(400).default(""),
+  requested_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date"),
+  weekday: z.number().int().min(0).max(6),
+  start_minute: z.number().int().min(0).max(1439),
+  end_minute: z.number().int().min(1).max(1440),
+  type: scheduleTypeSchema.default("office"),
+});
+
+export function createAppointment(
+  db: DatabaseSync,
+  facultyId: number,
+  input: z.infer<typeof createAppointmentSchema>,
+): number {
+  return transaction(db, () => {
+    const result = db
+      .prepare(
+        `INSERT INTO appointments
+           (faculty_id, office_hour_id, student_name, student_email, reason,
+            requested_date, weekday, start_minute, end_minute, schedule_type)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        facultyId,
+        input.office_hour_id,
+        input.student_name,
+        input.student_email,
+        input.reason,
+        input.requested_date,
+        input.weekday,
+        input.start_minute,
+        input.end_minute,
+        input.type,
+      );
+    const id = Number(result.lastInsertRowid);
+    auditLog(
+      db,
+      null,
+      "appointment.request",
+      facultyId,
+      `${input.student_name} requested ${input.requested_date}`,
+    );
+    return id;
+  });
+}
+
+export const appointmentResponseSchema = z.object({
+  status: z.enum(["approved", "declined", "cancelled"]),
+  faculty_note: z.string().trim().max(300).default(""),
+});
+
+export function respondToAppointment(
+  db: DatabaseSync,
+  appointmentId: number,
+  facultyId: number,
+  input: z.infer<typeof appointmentResponseSchema>,
+  actor: SessionUser | null,
+): void {
+  transaction(db, () => {
+    db.prepare(
+      `UPDATE appointments
+          SET status = ?, faculty_note = ?, updated_at = datetime('now')
+        WHERE id = ? AND faculty_id = ?`,
+    ).run(input.status, input.faculty_note, appointmentId, facultyId);
+    auditLog(db, actor, `appointment.${input.status}`, facultyId, `#${appointmentId}`);
   });
 }
 

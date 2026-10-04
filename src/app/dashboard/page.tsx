@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getDb } from "@/lib/db";
 import { getFaculty, listDepartments, listRooms } from "@/lib/faculty";
+import { listAppointmentsForFaculty } from "@/lib/appointments";
 import { currentUser } from "@/lib/auth";
 import { campusNow, WEEKDAYS, formatMinute, formatDate } from "@/lib/time";
 import StatusBadge from "@/components/StatusBadge";
@@ -11,6 +12,7 @@ import HoursEditor from "@/components/HoursEditor";
 import ProfileForm from "@/components/ProfileForm";
 import PhotoUpload from "@/components/PhotoUpload";
 import Avatar from "@/components/Avatar";
+import AppointmentsPanel from "@/components/AppointmentsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -92,14 +94,27 @@ export default async function DashboardPage() {
 
       <section className="card mt-6 p-5 sm:p-6" aria-labelledby="hours-heading">
         <h2 id="hours-heading" className="text-lg font-semibold">
-          Weekly office hours
+          Weekly schedule
         </h2>
         <p className="mt-1 max-w-2xl text-sm text-muted">
-          The schedule students see, and what FIND uses to work out whether you are in office hours
-          right now.
+          Office hours, consultation hours and class hours — tag each block so students know what
+          kind of time it is. All three count toward whether FIND shows you as available right now.
         </p>
         <div className="mt-4">
           <HoursEditor facultyId={faculty.id} hours={faculty.officeHours} />
+        </div>
+      </section>
+
+      <section className="card mt-6 p-5 sm:p-6" aria-labelledby="appointments-heading">
+        <h2 id="appointments-heading" className="text-lg font-semibold">
+          Appointment requests
+        </h2>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          Students request a specific slot from your published schedule. Approve or decline each
+          one — nothing is booked until you respond.
+        </p>
+        <div className="mt-4">
+          <AppointmentsPanel appointments={listAppointmentsForFaculty(db, faculty.id)} />
         </div>
       </section>
 

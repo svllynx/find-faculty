@@ -191,7 +191,7 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
           {departments.map((d) => (
             <li key={d.code} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
               <Link
-                href={`/?department=${d.code}`}
+                href={`/search?department=${d.code}`}
                 className="text-sm font-semibold text-ink hover:text-brand"
               >
                 {d.name}

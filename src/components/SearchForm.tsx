@@ -12,6 +12,12 @@ import type { Department } from "@/lib/faculty";
  * works with JavaScript off. The client bit only auto-submits when a dropdown
  * changes, saving a click.
  */
+const TYPE_OPTIONS = [
+  ["office", "Office hours"],
+  ["consultation", "Consultation hours"],
+  ["class", "Class hours"],
+] as const;
+
 export default function SearchForm({
   departments,
   floors,
@@ -19,13 +25,20 @@ export default function SearchForm({
 }: {
   departments: Department[];
   floors: number[];
-  initial: { q: string; department: string; floor: string; day: string; openNow: boolean };
+  initial: {
+    q: string;
+    department: string;
+    floor: string;
+    day: string;
+    type: string;
+    openNow: boolean;
+  };
 }) {
   const form = useRef<HTMLFormElement>(null);
   const submit = () => form.current?.requestSubmit();
 
   return (
-    <form ref={form} action="/" method="get" role="search" className="space-y-3">
+    <form ref={form} action="/search" method="get" role="search" className="space-y-3">
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <label htmlFor="q" className="sr-only">
@@ -52,7 +65,7 @@ export default function SearchForm({
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <div>
           <label htmlFor="department" className="label">
             Department
@@ -102,6 +115,20 @@ export default function SearchForm({
             {SHORT_WEEKDAYS.map((short, index) => (
               <option key={index} value={String(index)}>
                 {short}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="type" className="label">
+            Kind
+          </label>
+          <select id="type" name="type" defaultValue={initial.type} onChange={submit} className="field">
+            <option value="">Any kind</option>
+            {TYPE_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
           </select>

@@ -101,12 +101,49 @@ CREATE TABLE IF NOT EXISTS office_hours (
   weekday       INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),  -- 0 = Sunday
   start_minute  INTEGER NOT NULL CHECK (start_minute BETWEEN 0 AND 1439),
   end_minute    INTEGER NOT NULL CHECK (end_minute BETWEEN 1 AND 1440),
+  -- What this block actually is, so a student can tell "drop by" apart from
+  -- "I'm teaching, do not knock". All three count toward availability the
+  -- same way; only the label shown to students differs.
+  type          TEXT    NOT NULL DEFAULT 'office'
+                  CHECK (type IN ('office','consultation','class')),
   location_note TEXT    NOT NULL DEFAULT '',    -- 'Dept. office, not my room'
   CHECK (end_minute > start_minute)
 );
 
 CREATE INDEX IF NOT EXISTS idx_hours_faculty ON office_hours(faculty_id);
 CREATE INDEX IF NOT EXISTS idx_hours_window  ON office_hours(weekday, start_minute, end_minute);
+
+-- A student's request to meet a faculty member during one of their published
+-- blocks. Office/consultation/class hours can all be requested against — the
+-- block's own type column already says what kind of time it is. Anonymous by
+-- design: students never sign in, so a request carries a name and an email
+-- rather than a user id.
+CREATE TABLE IF NOT EXISTS appointments (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  faculty_id      INTEGER NOT NULL REFERENCES faculty(id) ON DELETE CASCADE,
+  office_hour_id  INTEGER REFERENCES office_hours(id) ON DELETE SET NULL,
+  student_name    TEXT    NOT NULL,
+  student_email   TEXT    NOT NULL,
+  reason          TEXT    NOT NULL DEFAULT '',
+  -- The concrete calendar date requested, plus the slot within that day —
+  -- copied off the office_hours block at request time, so the request still
+  -- makes sense even if the faculty member later edits or removes that block.
+  requested_date  TEXT    NOT NULL,              -- 'YYYY-MM-DD', campus time
+  weekday         INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+  start_minute    INTEGER NOT NULL CHECK (start_minute BETWEEN 0 AND 1439),
+  end_minute      INTEGER NOT NULL CHECK (end_minute BETWEEN 1 AND 1440),
+  schedule_type   TEXT    NOT NULL DEFAULT 'office'
+                    CHECK (schedule_type IN ('office','consultation','class')),
+  status          TEXT    NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending','approved','declined','cancelled')),
+  faculty_note    TEXT    NOT NULL DEFAULT '',    -- optional reply shown to the student
+  created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+  CHECK (end_minute > start_minute)
+);
+
+CREATE INDEX IF NOT EXISTS idx_appt_faculty ON appointments(faculty_id, status);
+CREATE INDEX IF NOT EXISTS idx_appt_date    ON appointments(requested_date);
 
 CREATE TABLE IF NOT EXISTS users (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

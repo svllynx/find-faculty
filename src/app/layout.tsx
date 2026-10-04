@@ -26,24 +26,26 @@ export const metadata: Metadata = {
 /**
  * The masthead.
  *
- * The wordmark is light blue with black artwork — drawn for a light surface — so
- * on the blue bar it sits in a white card rather than being recoloured. That
- * keeps the logo exactly as supplied and keeps it legible.
+ * The supplied wordmark is light blue with black artwork — drawn for a light
+ * surface, so it washed out directly on the brand bar. Rather than box it in
+ * a white card, find-logo-header.png recolours every opaque pixel to white
+ * (alpha untouched, so the edges stay soft) and sits straight on the navy,
+ * blending into the header instead of sitting on top of it.
  */
 function Masthead() {
   return (
     <Link
       href="/"
       aria-label="FIND — home"
-      className="inline-flex items-center rounded-2xl bg-white px-4 py-2 shadow-[0_12px_28px_-16px_rgba(0,0,0,0.45)] ring-1 ring-black/5 transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))] hover:-translate-y-0.5"
+      className="inline-flex items-center transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))] hover:-translate-y-0.5"
     >
       <Image
-        src="/find-logo.png"
+        src="/find-logo-header.png"
         alt="FIND — Faculty Information & Navigate Direction"
         width={481}
         height={269}
         priority
-        className="h-11 w-auto sm:h-12"
+        className="h-14 w-auto drop-shadow-[0_6px_18px_rgba(0,0,0,0.35)] sm:h-16"
       />
     </Link>
   );
@@ -58,7 +60,7 @@ function NavLinks({
 }) {
   return (
     <>
-      <Link href="/" className={linkClassName}>
+      <Link href="/search" className={linkClassName}>
         Search
       </Link>
       <Link href="/map" className={linkClassName}>
@@ -84,7 +86,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" className={jakarta.variable}>
-      <body className="min-h-screen">
+      {/* overflow-x-clip is a safety net, not decoration: a purely decorative
+          blurred glow (see page.tsx hero spotlights) is sized generously and
+          centred with a negative translate, which is exactly the shape of bug
+          that creates real horizontal scroll on narrow viewports if nothing
+          clips it. This guarantees no page can scroll sideways. */}
+      <body className="min-h-screen overflow-x-clip">
         <a
           href="#main"
           className="sr-only-focusable absolute left-4 top-4 z-50 rounded bg-white px-3 py-2 text-sm font-semibold text-brand"

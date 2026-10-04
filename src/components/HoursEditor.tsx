@@ -2,8 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { OfficeHour } from "@/lib/availability";
+import type { OfficeHour, ScheduleType } from "@/lib/availability";
+import { SCHEDULE_TYPE_LABEL } from "@/lib/availability";
 import { SHORT_WEEKDAYS, WEEKDAYS, parseTimeInput, toTimeInput } from "@/lib/time";
+
+const TYPE_OPTIONS: ScheduleType[] = ["office", "consultation", "class"];
 
 /**
  * The weekly office-hours editor.
@@ -18,6 +21,7 @@ type Draft = {
   weekday: number;
   start: string;
   end: string;
+  type: ScheduleType;
   note: string;
 };
 
@@ -30,6 +34,7 @@ function toDraft(hour: OfficeHour): Draft {
     weekday: hour.weekday,
     start: toTimeInput(hour.start_minute),
     end: toTimeInput(hour.end_minute),
+    type: hour.type ?? "office",
     note: hour.location_note ?? "",
   };
 }
@@ -53,7 +58,7 @@ export default function HoursEditor({
   const addRow = () =>
     setRows((current) => [
       ...current,
-      { key: nextKey(), weekday: 1, start: "13:00", end: "15:00", note: "" },
+      { key: nextKey(), weekday: 1, start: "13:00", end: "15:00", type: "office", note: "" },
     ]);
 
   const removeRow = (key: string) =>
@@ -82,6 +87,7 @@ export default function HoursEditor({
         weekday: row.weekday,
         start_minute: start,
         end_minute: end,
+        type: row.type,
         location_note: row.note.trim(),
       });
     }
@@ -118,7 +124,7 @@ export default function HoursEditor({
           {rows.map((row) => (
             <li
               key={row.key}
-              className="grid gap-2 rounded-lg border border-line bg-canvas p-3 sm:grid-cols-[7rem_1fr_1fr_1.4fr_auto] sm:items-end"
+              className="grid gap-2 rounded-lg border border-line bg-canvas p-3 sm:grid-cols-[6.5rem_1fr_1fr_8rem_1.2fr_auto] sm:items-end"
             >
               <div>
                 <label htmlFor={`day-${row.key}`} className="label">
@@ -162,6 +168,24 @@ export default function HoursEditor({
                   onChange={(e) => update(row.key, { end: e.target.value })}
                   className="field"
                 />
+              </div>
+
+              <div>
+                <label htmlFor={`type-${row.key}`} className="label">
+                  Kind
+                </label>
+                <select
+                  id={`type-${row.key}`}
+                  value={row.type}
+                  onChange={(e) => update(row.key, { type: e.target.value as ScheduleType })}
+                  className="field"
+                >
+                  {TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {SCHEDULE_TYPE_LABEL[type]}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>

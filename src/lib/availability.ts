@@ -37,10 +37,35 @@ export type AvailabilityState =
 
 export type AvailabilitySource = "faculty" | "schedule" | "none";
 
+export type ScheduleType = "office" | "consultation" | "class";
+
+const SCHEDULE_TYPES: readonly ScheduleType[] = ["office", "consultation", "class"];
+
+/** Narrow an untrusted string (a URL param, form value) to a ScheduleType, or undefined. */
+export function parseScheduleType(value: string | null | undefined): ScheduleType | undefined {
+  return (SCHEDULE_TYPES as readonly string[]).includes(value ?? "")
+    ? (value as ScheduleType)
+    : undefined;
+}
+
+export const SCHEDULE_TYPE_LABEL: Record<ScheduleType, string> = {
+  office: "Office hours",
+  consultation: "Consultation hours",
+  class: "Class hours",
+};
+
+/** The in-progress phrasing: "In office hours" / "In consultation hours" / "In class". */
+export const SCHEDULE_TYPE_IN_LABEL: Record<ScheduleType, string> = {
+  office: "In office hours",
+  consultation: "In consultation hours",
+  class: "In class",
+};
+
 export type OfficeHour = {
   weekday: number;
   start_minute: number;
   end_minute: number;
+  type?: ScheduleType;
   location_note?: string;
 };
 
@@ -65,6 +90,8 @@ export type Availability = {
   nextWindow: (OfficeHour & { minutesAway: number }) | null;
   /** Faculty's own note, if they left one. */
   note: string;
+  /** Which kind of block is active/next, when the state came from the schedule. */
+  scheduleType: ScheduleType | null;
   /** True when the faculty member posted this themselves. */
   selfReported: boolean;
   /** ISO datetime the posted status runs until, when one was given. */
@@ -147,6 +174,7 @@ export function resolveAvailability(
       currentWindow,
       nextWindow,
       note,
+      scheduleType: currentWindow?.type ?? null,
       selfReported: true,
       until: untilIso,
       longAbsence,
@@ -182,30 +210,33 @@ export function resolveAvailability(
     return {
       ...base,
       state: "office_hours",
-      label: "In office hours",
+      label: base.scheduleType ? SCHEDULE_TYPE_IN_LABEL[base.scheduleType] : "In office hours",
       dot: "amber",
-      detail: note || "Holding office hours — drop by.",
+      detail: note || "Holding hours — students may drop by.",
     };
   }
 
   const scheduled = {
     source: "schedule" as const,
     note,
+    scheduleType: null as ScheduleType | null,
     selfReported: false,
     until: null,
     longAbsence: false,
   };
 
   if (currentWindow) {
+    const type = currentWindow.type ?? "office";
     return {
       ...scheduled,
       state: "office_hours",
-      label: "In office hours",
+      label: SCHEDULE_TYPE_IN_LABEL[type],
       dot: "amber",
-      detail: `Scheduled office hours until ${formatRange(
+      scheduleType: type,
+      detail: `Scheduled ${SCHEDULE_TYPE_LABEL[type].toLowerCase()} until ${formatRange(
         currentWindow.start_minute,
         currentWindow.end_minute,
-      ).split(" – ")[1]}. Expected in office — not confirmed by them.`,
+      ).split(" – ")[1]}. Expected ${type === "class" ? "in class" : "in office"} — not confirmed by them.`,
       currentWindow,
       nextWindow,
     };

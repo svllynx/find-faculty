@@ -169,7 +169,12 @@ describe("profile photo validation", () => {
 
 describe("replaceOfficeHours", () => {
   it("replaces the whole set rather than appending duplicates", () => {
-    replaceOfficeHours(db, 1, [{ weekday: 2, start_minute: 600, end_minute: 720, location_note: "" }], actor);
+    replaceOfficeHours(
+      db,
+      1,
+      [{ weekday: 2, start_minute: 600, end_minute: 720, type: "office", location_note: "" }],
+      actor,
+    );
     const santos = getFaculty(db, 1, MONDAY_2PM)!;
     expect(santos.officeHours).toHaveLength(1);
     expect(santos.officeHours[0].weekday).toBe(2);
@@ -177,7 +182,12 @@ describe("replaceOfficeHours", () => {
 
   it("changes the availability students see", () => {
     expect(getFaculty(db, 1, MONDAY_2PM)!.availability.state).toBe("office_hours");
-    replaceOfficeHours(db, 1, [{ weekday: 6, start_minute: 480, end_minute: 600, location_note: "" }], actor);
+    replaceOfficeHours(
+      db,
+      1,
+      [{ weekday: 6, start_minute: 480, end_minute: 600, type: "office", location_note: "" }],
+      actor,
+    );
     expect(getFaculty(db, 1, MONDAY_2PM)!.availability.state).toBe("outside_hours");
   });
 

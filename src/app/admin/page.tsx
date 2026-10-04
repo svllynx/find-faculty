@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getDb, rows } from "@/lib/db";
 import { getFaculty, listDepartments, listRooms, searchFaculty } from "@/lib/faculty";
+import { listAppointmentsForFaculty, listPendingAppointments } from "@/lib/appointments";
 import { currentUser } from "@/lib/auth";
+import { WEEKDAYS, formatRange, formatDate } from "@/lib/time";
+import { SCHEDULE_TYPE_LABEL } from "@/lib/availability";
 import StatusBadge from "@/components/StatusBadge";
 import StatusControl from "@/components/StatusControl";
 import HoursEditor from "@/components/HoursEditor";
@@ -12,6 +15,7 @@ import AddFacultyForm from "@/components/AddFacultyForm";
 import ArchiveToggle from "@/components/ArchiveToggle";
 import PhotoUpload from "@/components/PhotoUpload";
 import Avatar from "@/components/Avatar";
+import AppointmentsPanel from "@/components/AppointmentsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +39,10 @@ const ACTION_LABEL: Record<string, string> = {
   "faculty.restore": "restored a record",
   "hours.replace": "changed office hours",
   "status.set": "posted availability",
+  "appointment.request": "received an appointment request",
+  "appointment.approved": "approved an appointment",
+  "appointment.declined": "declined an appointment",
+  "appointment.cancelled": "cancelled an appointment",
 };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<Search> }) {
@@ -65,6 +73,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   );
 
   const missingHours = records.filter((r) => r.is_active && r.officeHours.length === 0);
+  const pendingAppointments = listPendingAppointments(db);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
@@ -95,9 +104,37 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </p>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[20rem_1fr] lg:items-start">
+      {pendingAppointments.length > 0 && (
+        <div className="mt-5 card p-4">
+          <h2 className="text-sm font-semibold text-ink">
+            {pendingAppointments.length} pending appointment{" "}
+            {pendingAppointments.length === 1 ? "request" : "requests"}
+          </h2>
+          <ul className="mt-3 divide-y divide-line">
+            {pendingAppointments.slice(0, 5).map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2 text-sm">
+                <span className="font-medium text-ink">{a.student_name}</span>
+                <span className="text-muted">with</span>
+                <Link
+                  href={`/admin?faculty=${a.faculty_id}`}
+                  className="font-semibold text-brand hover:text-brand-ink"
+                >
+                  {a.faculty_name}
+                </Link>
+                <span className="text-muted">
+                  · {formatDate(new Date(`${a.requested_date}T12:00:00`))} {WEEKDAYS[a.weekday]}{" "}
+                  {formatRange(a.start_minute, a.end_minute)} ·{" "}
+                  {SCHEDULE_TYPE_LABEL[a.schedule_type]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr] lg:items-start">
         {/* ── Record list ───────────────────────────────────────────────── */}
-        <aside className="card p-4">
+        <aside className="card min-w-0 p-4">
           <form action="/admin" method="get" role="search">
             <label htmlFor="admin-q" className="label">
               Find a record
@@ -151,7 +188,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </aside>
 
         {/* ── Editor ────────────────────────────────────────────────────── */}
-        <div>
+        <div className="min-w-0">
           {!selected ? (
             <div className="card px-6 py-16 text-center">
               <p className="text-base font-semibold">Choose a record to edit</p>
@@ -219,13 +256,28 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
               <section className="card p-5" aria-labelledby="admin-hours">
                 <h3 id="admin-hours" className="text-base font-semibold">
-                  Office hours
+                  Weekly schedule
                 </h3>
+                <p className="mt-1 text-sm text-muted">
+                  Office, consultation and class hours — each block is tagged with its kind.
+                </p>
                 <div className="mt-4">
                   <HoursEditor
                     key={`hours-${selected.id}`}
                     facultyId={selected.id}
                     hours={selected.officeHours}
+                  />
+                </div>
+              </section>
+
+              <section className="card p-5" aria-labelledby="admin-appointments">
+                <h3 id="admin-appointments" className="text-base font-semibold">
+                  Appointment requests
+                </h3>
+                <div className="mt-4">
+                  <AppointmentsPanel
+                    key={`appointments-${selected.id}`}
+                    appointments={listAppointmentsForFaculty(db, selected.id)}
                   />
                 </div>
               </section>

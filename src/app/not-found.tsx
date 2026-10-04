@@ -11,7 +11,7 @@ export default function NotFound() {
         The record may have been archived, or the link may be out of date. Search the directory
         instead — a surname is usually enough.
       </p>
-      <Link href="/" className="btn btn-primary mt-6">
+      <Link href="/search" className="btn btn-primary mt-6">
         Back to faculty search
       </Link>
     </div>

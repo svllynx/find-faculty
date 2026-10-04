@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MapPin, Clock, BookOpen } from "@phosphor-icons/react/dist/ssr";
 import type { FacultyRecord } from "@/lib/faculty";
 import { WEEKDAYS, formatRange } from "@/lib/time";
+import { SCHEDULE_TYPE_LABEL } from "@/lib/availability";
 import StatusBadge from "./StatusBadge";
 import Avatar from "./Avatar";
 
@@ -22,13 +23,15 @@ export default function FacultyCard({
   const next = availability.nextWindow;
 
   const timeLine = availability.currentWindow
-    ? `Office hours now, until ${formatRange(
+    ? `${SCHEDULE_TYPE_LABEL[availability.currentWindow.type ?? "office"]} now, until ${formatRange(
         availability.currentWindow.start_minute,
         availability.currentWindow.end_minute,
       ).split(" – ")[1]}`
     : next
-      ? `Next: ${WEEKDAYS[next.weekday]}, ${formatRange(next.start_minute, next.end_minute)}`
-      : "No office hours published";
+      ? `Next: ${WEEKDAYS[next.weekday]}, ${formatRange(next.start_minute, next.end_minute)}${
+          next.type ? ` (${SCHEDULE_TYPE_LABEL[next.type].toLowerCase()})` : ""
+        }`
+      : "No hours published";
 
   return (
     <li {...(reveal ? { "data-reveal": true } : {})} className="card hover-lift p-4">
