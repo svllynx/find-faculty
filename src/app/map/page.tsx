@@ -45,7 +45,8 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
-      <h1 className="text-3xl font-bold tracking-tight">
+      <span className="eyebrow">Floor plan</span>
+      <h1 className="mt-4 text-3xl tracking-tight sm:text-4xl">
         Inside the {building?.name ?? "CCIS Building"}
       </h1>
       <p className="mt-3 max-w-2xl text-[15px] text-ink-soft">
@@ -83,10 +84,10 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
               key={f}
               href={`/map?floor=${f}`}
               aria-current={f === floor ? "page" : undefined}
-              className={`rounded-lg border px-3 py-1.5 text-sm font-semibold ${
+              className={`rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-all duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))] ${
                 f === floor
-                  ? "border-brand bg-brand text-white"
-                  : "border-line bg-surface text-ink-soft hover:bg-raise"
+                  ? "border-brand bg-brand text-white shadow-[0_10px_20px_-10px_rgba(36,57,122,0.6)]"
+                  : "border-line bg-surface text-ink-soft hover:-translate-y-px hover:bg-raise"
               }`}
             >
               {floorLabel(f)}

@@ -75,10 +75,12 @@ export default function FacultyCard({ faculty }: { faculty: FacultyRecord }) {
 
         <Link
           href={`/faculty/${faculty.id}`}
-          className="mt-3 inline-block text-sm font-semibold text-brand hover:text-brand-ink"
+          className="group mt-3 inline-flex items-center gap-2 text-sm font-semibold text-brand hover:text-brand-ink"
         >
           Office &amp; directions
-          <span aria-hidden="true"> →</span>
+          <span aria-hidden="true" className="btn-icon h-6 w-6 text-xs">
+            →
+          </span>
         </Link>
       </article>
     </li>

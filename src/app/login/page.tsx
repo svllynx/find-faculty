@@ -15,15 +15,18 @@ export default async function LoginPage() {
   if (user) redirect(user.role === "admin" ? "/admin" : "/dashboard");
 
   return (
-    <div className="mx-auto max-w-md px-4 py-12 sm:py-16">
-      <h1 className="text-2xl font-bold tracking-tight">Faculty &amp; staff sign in</h1>
+    <div className="mx-auto max-w-md px-4 py-14 sm:py-20">
+      <span className="eyebrow">Faculty &amp; staff</span>
+      <h1 className="mt-4 text-3xl tracking-tight">Sign in</h1>
       <p className="mt-2 text-sm text-ink-soft">
         Students do not need an account — the directory is open to everyone. Sign in only to update
         office hours or availability.
       </p>
 
-      <div className="card mt-6 p-5 sm:p-6">
-        <LoginForm />
+      <div className="bezel-shell mt-6">
+        <div className="bezel-core p-5 sm:p-6">
+          <LoginForm />
+        </div>
       </div>
 
       <div className="card mt-4 bg-raise/60 p-4 text-sm">

@@ -49,16 +49,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const openCount = openNowCount(db, now);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
-      <section className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-16">
+      <section className="mb-10 max-w-2xl">
+        <span className="eyebrow">CCIS faculty directory</span>
+        <h1 className="mt-4 text-4xl tracking-tight sm:text-5xl">
           Where and when can I find my professor?
         </h1>
-        <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-ink-soft">
+        <p className="mt-4 text-[15px] leading-relaxed text-ink-soft sm:text-base">
           Search once and get the office, the office hours and directions to the door together —
           instead of asking classmates or checking the CCIS bulletin board.
         </p>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-3 text-sm text-muted">
           {WEEKDAYS[clock.weekday]}, {formatMinute(clock.minute)} on campus ·{" "}
           <Link href="/?openNow=1" className="font-semibold text-brand hover:text-brand-ink">
             {openCount} faculty available right now
@@ -66,18 +67,20 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </p>
       </section>
 
-      <section className="card mb-8 p-4 sm:p-5">
-        <SearchForm
-          departments={departments}
-          floors={floors}
-          initial={{
-            q: filters.q ?? "",
-            department: filters.department ?? "",
-            floor: filters.floor === undefined ? "" : String(filters.floor),
-            day: filters.weekday === undefined ? "" : String(filters.weekday),
-            openNow: filters.openNow,
-          }}
-        />
+      <section className="bezel-shell mb-10">
+        <div className="bezel-core p-4 sm:p-5">
+          <SearchForm
+            departments={departments}
+            floors={floors}
+            initial={{
+              q: filters.q ?? "",
+              department: filters.department ?? "",
+              floor: filters.floor === undefined ? "" : String(filters.floor),
+              day: filters.weekday === undefined ? "" : String(filters.weekday),
+              openNow: filters.openNow,
+            }}
+          />
+        </div>
       </section>
 
       <section aria-labelledby="results-heading">
@@ -115,7 +118,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         )}
       </section>
 
-      <section className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             icon: "🟢",
@@ -137,12 +140,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             title: "Away until a date",
             body: "A longer absence — a seminar, leave, an accreditation visit — with the date they are back.",
           },
-        ].map((item) => (
-          <article key={item.title} className="card p-4">
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <span aria-hidden="true">{item.icon}</span>
-              {item.title}
-            </h3>
+        ].map((item, index) => (
+          <article
+            key={item.title}
+            className="card reveal p-4"
+            style={{ animationDelay: `${index * 80}ms` }}
+          >
+            <span aria-hidden="true" className="btn-icon h-9 w-9 text-base">
+              {item.icon}
+            </span>
+            <h3 className="mt-3 text-sm font-semibold">{item.title}</h3>
             <p className="mt-1.5 text-sm text-muted">{item.body}</p>
           </article>
         ))}

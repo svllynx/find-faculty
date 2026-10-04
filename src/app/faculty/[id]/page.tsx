@@ -60,7 +60,7 @@ export default async function FacultyProfilePage({ params }: Params) {
           <div className="flex items-start gap-4">
             <Avatar name={faculty.full_name} photo={faculty.photo_url} size="lg" />
             <div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{faculty.full_name}</h1>
+              <h1 className="text-2xl tracking-tight sm:text-3xl">{faculty.full_name}</h1>
               <p className="mt-1 text-[15px] text-ink-soft">
                 {faculty.title}
                 {faculty.title && faculty.department_name ? " · " : ""}
@@ -107,10 +107,12 @@ export default async function FacultyProfilePage({ params }: Params) {
           <p className="mt-4 text-sm">
             <Link
               href={user?.role === "admin" ? `/admin?faculty=${faculty.id}` : "/dashboard"}
-              className="font-semibold text-brand hover:text-brand-ink"
+              className="group inline-flex items-center gap-2 font-semibold text-brand hover:text-brand-ink"
             >
               Update this record
-              <span aria-hidden="true"> →</span>
+              <span aria-hidden="true" className="btn-icon h-6 w-6 text-xs">
+                →
+              </span>
             </Link>
           </p>
         )}

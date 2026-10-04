@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
 import { currentUser } from "@/lib/auth";
 import { usingEphemeralDb } from "@/lib/db";
 import SignOutButton from "@/components/SignOutButton";
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -27,7 +34,7 @@ function Masthead() {
     <Link
       href="/"
       aria-label="FIND — home"
-      className="inline-flex items-center rounded-xl bg-white px-4 py-2 shadow-sm ring-1 ring-black/5 transition-shadow hover:shadow"
+      className="inline-flex items-center rounded-2xl bg-white px-4 py-2 shadow-[0_12px_28px_-16px_rgba(0,0,0,0.45)] ring-1 ring-black/5 transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))] hover:-translate-y-0.5"
     >
       <Image
         src="/find-logo.png"
@@ -41,15 +48,41 @@ function Masthead() {
   );
 }
 
+function NavLinks({
+  user,
+  linkClassName,
+}: {
+  user: { role: string } | null;
+  linkClassName: string;
+}) {
+  return (
+    <>
+      <Link href="/" className={linkClassName}>
+        Search
+      </Link>
+      <Link href="/map" className={linkClassName}>
+        Building map
+      </Link>
+      {user && (
+        <Link href={user.role === "admin" ? "/admin" : "/dashboard"} className={linkClassName}>
+          {user.role === "admin" ? "Manage records" : "My office hours"}
+        </Link>
+      )}
+    </>
+  );
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
   const ephemeral = usingEphemeralDb();
 
   const navLink =
-    "rounded-md px-3 py-1.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/15 hover:text-white";
+    "rounded-full px-3.5 py-1.5 text-sm font-medium text-white/85 transition-all duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))] hover:-translate-y-px hover:bg-white/15 hover:text-white";
+  const sheetLink =
+    "rounded-xl px-3.5 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-raise";
 
   return (
-    <html lang="en">
+    <html lang="en" className={jakarta.variable}>
       <body className="min-h-screen">
         <a
           href="#main"
@@ -70,21 +103,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <span className="font-semibold text-white">CCIS</span>
           </p>
 
+          {/* Desktop / tablet: the nav row itself reads as a floating pill,
+              detached visually from the bar via its own rounded-full hairline. */}
           <nav
             aria-label="Main"
-            className="flex flex-wrap items-center justify-center gap-1 border-t border-white/15 px-4 py-2"
+            className="hidden items-center justify-center gap-1 border-t border-white/15 px-4 py-2 sm:flex"
           >
-            <Link href="/" className={navLink}>
-              Search
-            </Link>
-            <Link href="/map" className={navLink}>
-              Building map
-            </Link>
+            <NavLinks user={user} linkClassName={navLink} />
             {user ? (
               <>
-                <Link href={user.role === "admin" ? "/admin" : "/dashboard"} className={navLink}>
-                  {user.role === "admin" ? "Manage records" : "My office hours"}
-                </Link>
                 <span className="mx-1 hidden text-xs text-white/60 sm:inline">
                   {user.display_name || user.email}
                 </span>
@@ -93,12 +120,41 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ) : (
               <Link
                 href="/login"
-                className="ml-1 rounded-md bg-white/15 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/25"
+                className="ml-1 rounded-full bg-white/15 px-3.5 py-1.5 text-sm font-semibold text-white transition-all duration-300 hover:-translate-y-px hover:bg-white/25"
               >
                 Faculty sign in
               </Link>
             )}
           </nav>
+
+          {/* Mobile: a native <details> disclosure, so the menu opens and the
+              hamburger morphs into an "X" with zero JavaScript. */}
+          <details className="nav-toggle relative border-t border-white/15 sm:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white/90 [&::-webkit-details-marker]:hidden">
+              <span aria-hidden="true" className="relative flex h-4 w-5 flex-col justify-between">
+                <span className="nav-line h-[1.5px] w-full origin-center rounded-full bg-white transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))]" />
+                <span className="nav-line h-[1.5px] w-full origin-center rounded-full bg-white transition-transform duration-300 ease-[var(--ease-premium,cubic-bezier(.32,.72,0,1))]" />
+              </span>
+              Menu
+            </summary>
+          </details>
+          <div className="nav-sheet overflow-hidden px-4 sm:hidden">
+            <div className="flex flex-col gap-1 rounded-2xl bg-white p-2 shadow-[0_20px_40px_-20px_rgba(0,0,0,0.5)]">
+              <NavLinks user={user} linkClassName={sheetLink} />
+              {user ? (
+                <div className="flex items-center justify-between gap-2 border-t border-line px-3.5 py-2.5">
+                  <span className="truncate text-xs text-muted">
+                    {user.display_name || user.email}
+                  </span>
+                  <SignOutButton />
+                </div>
+              ) : (
+                <Link href="/login" className="rounded-xl bg-brand px-3.5 py-2.5 text-sm font-semibold text-white">
+                  Faculty sign in
+                </Link>
+              )}
+            </div>
+          </div>
         </header>
 
         {ephemeral && (
@@ -112,9 +168,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main id="main">{children}</main>
 
         <footer className="mt-16 border-t border-line bg-surface">
-          <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-muted sm:px-6">
-            <p className="max-w-2xl">
-              <strong className="font-semibold text-ink-soft">
+          <div className="mx-auto max-w-6xl px-4 py-10 text-sm text-muted sm:px-6">
+            <span className="eyebrow">Privacy by design</span>
+            <p className="mt-3 max-w-2xl text-ink-soft">
+              <strong className="font-semibold text-ink">
                 FIND does not track anyone&rsquo;s location.
               </strong>{" "}
               Every office hour and availability status you see here was published by that faculty
